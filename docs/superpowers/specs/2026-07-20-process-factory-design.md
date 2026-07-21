@@ -303,3 +303,38 @@ Binding consequences:
 4. **Anchors over guard accumulation.** The seed-diff caught the first live error because
    it was an anchored measurement with a short feedback loop. Prefer adding anchors and
    shortening resolution loops to adding gates.
+
+---
+
+## 15. Baseline accord + adoptions from the 2026-04 goals conversation (addendum, 2026-07-21)
+
+Provenance: operator's Apr 10–11 conversation with Sonnet (Engram Temporal/forge/goals work;
+transcript reviewed 2026-07-21). Operator's stated lesson after Engram's goals system broke on
+poisoned memory: **determine early in the pipeline whether all parties agree on the baseline
+facts before engaging in any meaningful work; if not, establish that baseline first.**
+
+1. **Baseline Accord (new stage-1 exit gate — priority build).** Assess ends by emitting a
+   *Baseline Accord*: the run's current-state claims as typed, falsifiable statements, each
+   tagged with provenance (`scanned` — fs/registry evidence attached; `measured` — probe or
+   metric value attached; `claimed` — unverified, listed loudly). The pipeline HALTS for
+   accord before decomposition: operator ack, or mechanical verification against anchors
+   (registry, seed, probes) where they exist. Disagreement is not an error — it is the
+   signal to establish the baseline before spending any downstream judgment. (Round 3's
+   "factory is a full gap" false premise is the motivating instance; Sonnet's recurring
+   "Verified Gaps (disk state, not memory)" tables are the manual form.)
+2. **`implementation_status` on artifacts/subtasks**: `new` vs `exists` (harden, with
+   locations) — different briefs for different cognitive tasks; prevents rebuilding or
+   breaking what exists.
+3. **Mission-brief role contract**: current state / target state / scope boundary /
+   binary done-when — replaces story-shaped role instructions at emit time.
+4. **Anchor traceability, flag-not-reject**: every subtask names which anchor/outcome
+   metric it moves, or declares its enabling chain; unanswerable = flagged for the
+   operator, never silently passed or hard-rejected (Goodhart guard inside the contract).
+5. **Doubt-led framing** for generated executors and judges: pose the problem the process
+   exists to solve ("if this broke silently tomorrow, would the system tell you?") rather
+   than the checklist — structurally harder to game than compliance framing.
+6. **Constraint-first sequencing; close the loop once** before elaboration — TOC over the
+   decomposition; the first end-to-end pass outranks component completeness.
+7. **Metric evolution lives inside the improvement loop**: when scan detects the
+   constraint has shifted, it proposes new anchor metrics — "that's not instability,
+   that's the system working correctly."
