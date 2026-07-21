@@ -411,3 +411,40 @@ Design commitments:
 
 Eventually D-entry-shaped for the Engram/AGT decision log: it defines who may build the
 thing that governs everyone.
+
+---
+
+## 18. Operator process doctrine (requirements for the business-process engagement, 2026-07-21)
+
+Stated by the operator ahead of the build/maintain business-process compile. These are
+requirements the emitted processes MUST satisfy, and gate-review criteria for the spec.
+
+1. **One canonical home per artifact type, per level.** Decisions, work items, worklists,
+   todos: exactly one location at the main-repository level, optionally mirrored at
+   service/feature level — and every agent on every surface reads AND writes the same
+   place. Drift's root cause is not missing practice; it is the same practice done in
+   different places. Every emitted process pack must DECLARE its artifact locations as
+   contract, not convention.
+2. **Documents die after build.** Design docs are larvae: once built, either a detailed
+   spec of what IS exists, or the code is obvious enough to need none (code-as-spec
+   preferred). No orphaned intent docs; accord sweeps enforce promote-or-demote; memory
+   decay classes should agree (procedural intent decays fast).
+3. **Multi-hat design.** Every process is designed and reviewed from each seat: QA (what
+   would I check?), dev (what do I need to see and where?), ops, next-agent (how do I
+   clean up so the next agent isn't confused?). Judge panels wear these hats.
+4. **Cleanup is part of the work.** Leaving state another agent must puzzle over is a
+   defect. "Am I required to clean up, and is anyone checking?" must answer yes/yes.
+5. **Enforcement is not optional — it is the historical failure mode.** "We've been good
+   at building processes; then we don't enforce anything, so they don't get used." Every
+   process ships WITH its enforcement (gates/hooks/fidelity checks), or it does not ship.
+6. **Skills attached to a process are mandatory, not suggestions.** An agent cannot
+   progress a phase until the required skill is actually loaded, with artifact evidence
+   of use (WL-GOV-03 fidelity pattern). A skill on a process IS the process.
+7. **Propose-a-change is the only legitimate exit.** Agents who chafe at a process do not
+   bypass it; they file a proposal (needs-review, D-044). Escape valve priced in;
+   bypass priced out. "Agency comes with — it's not free."
+
+Existing machinery these bind to: D-015 (WORKLIST as THE list), PLATFORM-SOT §1 (SoT map),
+skill_gates + coding_lane fidelity.py (mandatory-skill enforcement), accord sweeps (§15/
+D-candidate), needs-review queue (WL-SKILL-2b), persona-interview skill (multi-hat
+judging), §16 ladder (priced agency).
