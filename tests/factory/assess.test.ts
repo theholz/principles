@@ -140,6 +140,56 @@ describe("scanRoots", () => {
       { name: "local-helper", kind: "skill", location: "/skills/local-helper", hint: "local helper skill", source: "fs" },
     ]);
   });
+
+  // Versioned marketplace cache: <root>/<name>/<version>/skills/<skill>/SKILL.md
+  // (live-run-2 finding: this layout previously yielded ZERO fs candidates and
+  // the classifier invented gap entries from problem clauses).
+  it("descends the versioned marketplace layout one level: the versioned dir is scanned as the plugin, entry name stays <name>", () => {
+    const files = {
+      "/cache/methodologies/0.1.0/.claude-plugin/plugin.json": "{}",
+      "/cache/methodologies/0.1.0/skills/dmaic/SKILL.md": "---\ndescription: Six Sigma DMAIC improvement loop\n---\nbody",
+      // skills/-only versioned plugin (no plugin.json): still qualifies.
+      "/cache/journal-tools/0.3.0/skills/trade-log/SKILL.md": "---\ndescription: structured trade log capture\n---\nbody",
+    };
+    const scan = scanRoots(fixtureFs(files), ["/cache"]);
+    expect(scan.scannedRoots).toEqual(["/cache"]);
+    expect(scan.candidates).toEqual([
+      { name: "methodologies", kind: "plugin", location: "/cache/methodologies/0.1.0", hint: "", source: "fs" },
+      {
+        name: "dmaic",
+        kind: "skill",
+        location: "/cache/methodologies/0.1.0/skills/dmaic",
+        hint: "Six Sigma DMAIC improvement loop",
+        source: "fs",
+      },
+      {
+        name: "trade-log",
+        kind: "skill",
+        location: "/cache/journal-tools/0.3.0/skills/trade-log",
+        hint: "structured trade log capture",
+        source: "fs",
+      },
+    ]);
+  });
+
+  it("picks the lexicographically last version when the cache holds several", () => {
+    const files = {
+      "/cache/toolkit/0.1.0/skills/alpha/SKILL.md": "---\ndescription: old alpha\n---\nbody",
+      "/cache/toolkit/0.2.0/skills/alpha/SKILL.md": "---\ndescription: new alpha\n---\nbody",
+    };
+    const scan = scanRoots(fixtureFs(files), ["/cache"]);
+    expect(scan.candidates).toEqual([
+      { name: "alpha", kind: "skill", location: "/cache/toolkit/0.2.0/skills/alpha", hint: "new alpha", source: "fs" },
+    ]);
+  });
+
+  it("does NOT descend into a flat plugin dir's children (a skills/ subdir is not a version)", () => {
+    // /plugins/methodologies has direct markers — its children (.claude-plugin,
+    // skills, hooks) must never be treated as version dirs.
+    const scan = scanRoots(fixtureFs(defaultFiles), ["/plugins"]);
+    expect(scan.candidates.map((c) => c.name)).toEqual(["methodologies", "dmaic", "gate"]);
+    expect(scan.candidates.every((c) => !c.location.includes("/skills/skills"))).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

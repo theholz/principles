@@ -174,10 +174,52 @@ const skillDescription = (fs: AssessFs, skillMdPath: string): string => {
 };
 
 /**
+ * Scan one plugin-shaped directory for capability candidates: a plugin marker
+ * (.claude-plugin/plugin.json), a bare SKILL.md, nested skills
+ * (skills/<skill>/SKILL.md), and hook files. `name` is the entry name recorded
+ * on the plugin/bare-skill candidates — for the versioned-marketplace layout
+ * it is the plugin name, never the version segment.
+ */
+const scanPluginDir = (fs: AssessFs, name: string, dir: string, add: (c: ScanCandidate) => void): void => {
+  if (fs.exists(`${dir}/.claude-plugin/plugin.json`)) {
+    add({ name, kind: "plugin", location: dir, hint: "", source: "fs" });
+  }
+  if (fs.exists(`${dir}/SKILL.md`)) {
+    add({ name, kind: "skill", location: dir, hint: skillDescription(fs, `${dir}/SKILL.md`), source: "fs" });
+  }
+  const skillsDir = `${dir}/skills`;
+  if (fs.exists(skillsDir)) {
+    for (const skill of safeReaddir(fs, skillsDir)) {
+      const skillMd = `${skillsDir}/${skill}/SKILL.md`;
+      if (fs.exists(skillMd)) {
+        add({ name: skill, kind: "skill", location: `${skillsDir}/${skill}`, hint: skillDescription(fs, skillMd), source: "fs" });
+      }
+    }
+  }
+  const hooksDir = `${dir}/hooks`;
+  if (fs.exists(hooksDir)) {
+    for (const hook of safeReaddir(fs, hooksDir)) {
+      add({ name: hook.replace(/\.[^.]+$/, ""), kind: "hook", location: `${hooksDir}/${hook}`, hint: "", source: "fs" });
+    }
+  }
+};
+
+/**
  * Walk the configured roots collecting capability candidates: plugin dirs
  * (marked by .claude-plugin/plugin.json), skills (skills/<name>/SKILL.md, or a
  * root-level <name>/SKILL.md for bare skill dirs), and hook files. A missing
  * root is skipped silently here and reported via unavailableRoots.
+ *
+ * Layouts handled (bounded depth — no general recursion):
+ *   - flat:      <root>/<name>/{.claude-plugin, SKILL.md, skills/, hooks/}
+ *   - versioned: <root>/<name>/<version>/{.claude-plugin, skills/, ...} — a
+ *     marketplace cache (live-run-2 finding: this layout previously scanned to
+ *     ZERO candidates, and with an empty inventory the classifier invented gap
+ *     entries from problem clauses). A <name> dir carrying no direct plugin
+ *     marker, SKILL.md, or skills/ has its children checked for versioned
+ *     plugin dirs (marked by .claude-plugin/plugin.json OR skills/); the
+ *     lexicographically LAST qualifying version is scanned as the plugin dir,
+ *     with entry name <name>.
  */
 export function scanRoots(fs: AssessFs, roots: string[]): ScanResult {
   const candidates: ScanCandidate[] = [];
@@ -201,26 +243,18 @@ export function scanRoots(fs: AssessFs, roots: string[]): ScanResult {
 
     for (const entry of safeReaddir(fs, root)) {
       const dir = `${root}/${entry}`;
+      scanPluginDir(fs, entry, dir, add);
 
-      if (fs.exists(`${dir}/.claude-plugin/plugin.json`)) {
-        add({ name: entry, kind: "plugin", location: dir, hint: "", source: "fs" });
-      }
-      if (fs.exists(`${dir}/SKILL.md`)) {
-        add({ name: entry, kind: "skill", location: dir, hint: skillDescription(fs, `${dir}/SKILL.md`), source: "fs" });
-      }
-      const skillsDir = `${dir}/skills`;
-      if (fs.exists(skillsDir)) {
-        for (const skill of safeReaddir(fs, skillsDir)) {
-          const skillMd = `${skillsDir}/${skill}/SKILL.md`;
-          if (fs.exists(skillMd)) {
-            add({ name: skill, kind: "skill", location: `${skillsDir}/${skill}`, hint: skillDescription(fs, skillMd), source: "fs" });
-          }
-        }
-      }
-      const hooksDir = `${dir}/hooks`;
-      if (fs.exists(hooksDir)) {
-        for (const hook of safeReaddir(fs, hooksDir)) {
-          add({ name: hook.replace(/\.[^.]+$/, ""), kind: "hook", location: `${hooksDir}/${hook}`, hint: "", source: "fs" });
+      // Versioned-marketplace descent: exactly ONE extra level, and only when
+      // the direct child carries none of the flat-layout markers itself.
+      const hasDirectMarkers =
+        fs.exists(`${dir}/.claude-plugin/plugin.json`) || fs.exists(`${dir}/SKILL.md`) || fs.exists(`${dir}/skills`);
+      if (!hasDirectMarkers) {
+        const versions = safeReaddir(fs, dir)
+          .filter((v) => fs.exists(`${dir}/${v}/.claude-plugin/plugin.json`) || fs.exists(`${dir}/${v}/skills`))
+          .sort();
+        if (versions.length > 0) {
+          scanPluginDir(fs, entry, `${dir}/${versions[versions.length - 1]}`, add);
         }
       }
     }

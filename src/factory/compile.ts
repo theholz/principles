@@ -74,6 +74,27 @@ export interface CompileResult {
 /** Assert-able marker prefixing every enriched objective (design §4 [2]). */
 export const ENRICHMENT_MARKER = "## Environment assessment";
 
+/**
+ * Context/objective separation (live-run-2 finding): without this boundary,
+ * deriveTruths treated the assessment prefix as objective material and derived
+ * meta-truths ABOUT the triage/constraint statements (and the pipeline's own
+ * output schema); the skeptic killed them all and compile hard-failed with
+ * "No truths survived vetting". Appended to the marker as the section header.
+ */
+export const CONTEXT_ONLY_INSTRUCTION =
+  "(context only — NOT part of the objective. Do not derive truths about this assessment text, the inventory, or the pipeline's own output format; derive truths about the PROBLEM below.)";
+
+/**
+ * Normative-constraint framing (live-run-2 finding): the skeptic rejected
+ * constraint-type truths — requirements the solution must guarantee — as
+ * "nothing currently enforces this", judging requirements on the solution as
+ * descriptive claims about current state. The shared objective string is the
+ * factory's only sanctioned lever into deriveTruths AND the skeptic (src/core
+ * stays unmodified), so the framing travels there, after the problem.
+ */
+export const NORMATIVE_CONSTRAINT_FRAMING =
+  "Note: constraint-type truths are REQUIREMENTS the solution must guarantee — judge them as normative requirements, not as claims that they currently hold.";
+
 const STATUS_ORDER: Record<InventoryStatus, number> = { built: 0, partial: 1, gap: 2 };
 
 const renderInventoryEntry = (e: InventoryEntry): string =>
@@ -84,13 +105,15 @@ const renderInventoryEntry = (e: InventoryEntry): string =>
  * problem PREFIXED with a compact assessment summary — constraint statement
  * plus top inventory hits — so truths ground in the actual environment.
  * Existing capabilities (built, then partial) sort before gaps; the list is
- * capped so the prefix stays compact.
+ * capped so the prefix stays compact. The assessment block is explicitly
+ * bounded as context-only (see CONTEXT_ONLY_INSTRUCTION), and the normative-
+ * constraint framing (NORMATIVE_CONSTRAINT_FRAMING) follows the problem.
  */
 export function enrichObjective(problem: string, assessResult: AssessResult): string {
   const { triageVerdict, constraint, inventory } = assessResult.assessment;
   const top = [...inventory].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]).slice(0, 8);
   return [
-    ENRICHMENT_MARKER,
+    `${ENRICHMENT_MARKER} ${CONTEXT_ONLY_INSTRUCTION}`,
     `Triage: ${triageVerdict.verdict} — ${triageVerdict.evidence}`,
     `Constraint (${constraint.id}, ${constraint.type}): ${constraint.statement}`,
     `Top inventory:`,
@@ -98,6 +121,8 @@ export function enrichObjective(problem: string, assessResult: AssessResult): st
     ``,
     `## Problem`,
     problem,
+    ``,
+    NORMATIVE_CONSTRAINT_FRAMING,
   ].join("\n");
 }
 
