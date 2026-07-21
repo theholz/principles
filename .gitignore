@@ -15,3 +15,4 @@ rubrics/
 receipts/
 review-receipts/
 .claude/tmp/
+.claude/worktrees/
