@@ -2,7 +2,11 @@ import path from "path";
 import { execFile } from "child_process";
 import fs from "fs-extra";
 import { Llm, LlmRequest } from "../llm/gateway";
-import { resolveDefaultLlm, providerSupportsWebTools } from "../llm/resolveLlm";
+import {
+  resolveDefaultLlm,
+  providerSupportsWebTools,
+  resolveProviderConfig,
+} from "../llm/resolveLlm";
 import { failures } from "../shared/types";
 import { loadProcessSpec } from "../factory/loadSpec";
 import { validateProcessSpec } from "../factory/validators";
@@ -13,8 +17,10 @@ import { readOutcomes, scanPack, ImprovementProposal } from "../factory/scan";
 import { EngramClient } from "../factory/assess";
 
 /**
- * Process-factory CLI (design §7): `factory compile | emit | deploy | scan`.
- * All four verbs are live. `emit` and `deploy` are deliberately deterministic
+ * Process-factory CLI (design §7): `factory compile | emit | deploy | scan | models`.
+ * All five verbs are live. `models` is a read-only introspection verb: one GET
+ * against the configured provider's `/models` endpoint (no LLM call) via the
+ * injected `deps.fetchJson`. `emit` and `deploy` are deliberately deterministic
  * and offline — no model call on either path, and the LLM gateway is resolved
  * LAZILY (first model call only) so a keyless environment can still emit and
  * deploy without provider warnings. `compile` (stages 1–4) and `scan`
@@ -58,6 +64,10 @@ export interface FactoryDeps {
    * No production client is wired yet; absent, the flag warns and degrades
    * gracefully to filesystem inventory (design §9). */
   engram?: EngramClient;
+  /** JSON GET for the `models` verb (tests inject; absent, a global-fetch
+   * default is used). Must reject on network failure and throw on non-2xx
+   * with the HTTP status in the message so cmdModels can surface it. */
+  fetchJson?: (url: string, headers: Record<string, string>) => Promise<unknown>;
   log: (s: string) => void;
   error: (s: string) => void;
 }
@@ -69,6 +79,7 @@ const USAGE = [
   "  deploy <pack-dir> [--engram-root <dir>]                                 branch + draft PR only",
   "  scan --spec <spec-path> --outcomes <dump-path> [--min-sample N] [--out <path>]",
   "                                                                          measure-and-propose; proposals are never auto-applied",
+  "  models                                                                  list model families/ids visible to the configured provider key",
 ].join("\n");
 
 // ---------------------------------------------------------------------------
@@ -458,6 +469,111 @@ async function cmdScan(deps: FactoryDeps, rest: string[]): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
+// models
+// ---------------------------------------------------------------------------
+
+/* istanbul ignore next -- network default; tests always inject deps.fetchJson */
+const defaultFetchJson = async (
+  url: string,
+  headers: Record<string, string>
+): Promise<unknown> => {
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  return res.json();
+};
+
+/**
+ * Family heuristic: the prefix before the first "/" when the id is namespaced
+ * ("openai/gpt-4.1" → "openai", "meta-llama/Llama-3" → "meta-llama"); else the
+ * prefix before the first "-" ("grok-4.5" → "grok", "claude-sonnet-5" →
+ * "claude"); an id with neither separator is its own family.
+ */
+function modelFamily(id: string): string {
+  const slash = id.indexOf("/");
+  if (slash > 0) return id.slice(0, slash);
+  const dash = id.indexOf("-");
+  if (dash > 0) return id.slice(0, dash);
+  return id;
+}
+
+async function cmdModels(deps: FactoryDeps, rest: string[]): Promise<number> {
+  if (rest.length > 0) {
+    deps.error(`models takes no arguments, got: ${rest[0]}. ${USAGE}`);
+    return 2;
+  }
+
+  const cfg = resolveProviderConfig();
+
+  if (cfg.provider === "claude" || cfg.provider === "anthropic") {
+    // The Agent SDK has no OpenAI-style /models listing endpoint; model ids
+    // are resolved internally (local claude login or ANTHROPIC_API_KEY).
+    deps.log(`Provider: ${cfg.provider} (Claude Agent SDK)`);
+    deps.log(
+      "The Agent SDK resolves models internally — there is no listing endpoint to query. " +
+        `Set PRINCIPLES_MODEL to pin a model (current: ${cfg.model}).`
+    );
+    return 0;
+  }
+
+  if (!cfg.apiKey) {
+    deps.error(
+      `No API key configured for provider "${cfg.provider}" — cannot query ${cfg.baseURL}/models. ` +
+        "Set the provider's key (XAI_API_KEY / OPENAI_API_KEY / PRINCIPLES_API_KEY)."
+    );
+    return 1;
+  }
+
+  const url = `${cfg.baseURL}/models`;
+  const fetchJson = deps.fetchJson ?? defaultFetchJson;
+  let body: unknown;
+  try {
+    body = await fetchJson(url, { Authorization: `Bearer ${cfg.apiKey}` });
+  } catch (e) {
+    deps.error(`Failed to list models from ${url}: ${e instanceof Error ? e.message : String(e)}`);
+    deps.error(
+      "Hint: check that the endpoint is up (LiteLLM proxy running? PRINCIPLES_BASE_URL correct?) and the key is valid."
+    );
+    return 1;
+  }
+
+  // OpenAI listing shape: { data: [{ id, owned_by? }] }.
+  const data = (body as { data?: unknown } | null | undefined)?.data;
+  if (!Array.isArray(data)) {
+    deps.error(`Unexpected response shape from ${url}: expected OpenAI-style { data: [{ id }] }.`);
+    return 1;
+  }
+  const ids = data
+    .map((d) => (d && typeof d === "object" ? (d as { id?: unknown }).id : undefined))
+    .filter((id): id is string => typeof id === "string");
+
+  deps.log(`Provider: ${cfg.provider}  base URL: ${cfg.baseURL}  (${ids.length} model(s))`);
+
+  const families = new Map<string, string[]>();
+  for (const id of ids) {
+    const family = modelFamily(id);
+    const bucket = families.get(family);
+    if (bucket) bucket.push(id);
+    else families.set(family, [id]);
+  }
+
+  // Selection marker keys off the EXPLICIT env choice (PRINCIPLES_MODEL), not
+  // the provider default — an unset env means nothing is "selected" to mark.
+  const selected = process.env.PRINCIPLES_MODEL;
+  for (const family of [...families.keys()].sort()) {
+    deps.log(`${family}:`);
+    for (const id of [...families.get(family)!].sort()) {
+      deps.log(`  ${id}${id === selected ? " * (selected)" : ""}`);
+    }
+  }
+  if (selected && !ids.includes(selected)) {
+    deps.log(
+      `Note: PRINCIPLES_MODEL="${selected}" is not in the listing — selected model not visible to this key.`
+    );
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // dispatch
 // ---------------------------------------------------------------------------
 
@@ -472,6 +588,8 @@ export async function run(argv: string[], deps: FactoryDeps): Promise<number> {
       return cmdDeploy(deps, rest);
     case "scan":
       return cmdScan(deps, rest);
+    case "models":
+      return cmdModels(deps, rest);
     default:
       deps.error(`Unknown subcommand: ${cmd ?? "(none)"}. ${USAGE}`);
       return 2;
