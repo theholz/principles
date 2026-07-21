@@ -34,8 +34,10 @@ export function resolveDefaultLlm(modelOverride?: string): Llm {
         baseURL: process.env.PRINCIPLES_BASE_URL ?? "https://api.openai.com/v1",
         model: model ?? "gpt-4.1",
         // Explicit precedence: never let a stray XAI_API_KEY (the gateway's
-        // first fallback) be sent to an OpenAI endpoint.
-        apiKey: process.env.OPENAI_API_KEY ?? process.env.PRINCIPLES_API_KEY,
+        // first fallback) be sent to an OpenAI endpoint. Empty string (not
+        // undefined) so the gateway's missing-key error fires instead of its
+        // XAI_API_KEY fallback when no OpenAI key is set.
+        apiKey: process.env.OPENAI_API_KEY ?? process.env.PRINCIPLES_API_KEY ?? "",
       });
 
     case "xai":
