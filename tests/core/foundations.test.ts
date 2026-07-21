@@ -36,6 +36,23 @@ const scriptedLlm = (): Llm =>
   }) as unknown as Llm;
 
 describe("deriveFoundations", () => {
+  it("skips the landscape survey when webSurvey is false (no fabricated citations on web-less providers)", async () => {
+    const requested: string[] = [];
+    const base = scriptedLlm();
+    const llm = (async <T>(req: LlmRequest<T>) => {
+      requested.push(req.schemaName);
+      if (req.schemaName === "landscape_survey") {
+        throw new Error("landscape_survey must not be requested when webSurvey is false");
+      }
+      return base(req);
+    }) as unknown as Llm;
+
+    const f = await deriveFoundations(llm, "test objective", { webSurvey: false });
+    expect(f.survey).toEqual([]);
+    expect(requested).not.toContain("landscape_survey");
+    expect(f.truths.length).toBeGreaterThan(0);
+  });
+
   it("includes the web request in the judge prompt so d-web can be verified", async () => {
     const capture: { prompt?: string } = {};
     const llm = (async <T>(req: LlmRequest<T>) => {

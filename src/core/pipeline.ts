@@ -4,7 +4,7 @@ import { RefineOutcome } from "../shared/refine";
 import { VetResult } from "./skeptic";
 import { outputRubric } from "./rubric";
 import { generateAgentSpecs } from "./specs";
-import { deriveFoundations } from "./foundations";
+import { deriveFoundations, FoundationsOptions } from "./foundations";
 import { DecompositionResult } from "./decompose";
 
 export interface GenerationReport {
@@ -17,8 +17,12 @@ export interface GenerationReport {
  * deriveFoundations (derive → vet → refine-with-coverage) + agent specs +
  * ontology assembly. See src/core/foundations.ts for the shared front half.
  */
-export async function generateOntology(llm: Llm, objective: string): Promise<GenerationReport> {
-  const f = await deriveFoundations(llm, objective);
+export async function generateOntology(
+  llm: Llm,
+  objective: string,
+  opts: FoundationsOptions = {}
+): Promise<GenerationReport> {
+  const f = await deriveFoundations(llm, objective, opts);
   const agents = await generateAgentSpecs(llm, objective, f.truths, f.subtasks);
 
   return {

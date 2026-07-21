@@ -1,7 +1,7 @@
 import path from "path";
 import dotenv from "dotenv";
 dotenv.config();
-import { resolveDefaultLlm } from "../llm/resolveLlm";
+import { resolveDefaultLlm, providerSupportsWebTools } from "../llm/resolveLlm";
 import { generateOntology } from "../core/pipeline";
 import { emitPackage } from "../core/emit";
 
@@ -16,7 +16,9 @@ const main = async () => {
   const provider = process.env.PRINCIPLES_PROVIDER ?? "xai";
   console.log(`Provider: ${provider} (model: ${process.env.PRINCIPLES_MODEL ?? "default"})`);
   console.log("Deriving and vetting truths, decomposing, generating agent specs...");
-  const report = await generateOntology(llm, userPrompt);
+  const report = await generateOntology(llm, userPrompt, {
+    webSurvey: providerSupportsWebTools(),
+  });
 
   // Surface what the mechanisms found — this is the point of building them.
   if (report.vet.assumptions.length > 0) {

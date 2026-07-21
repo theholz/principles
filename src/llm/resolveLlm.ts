@@ -33,6 +33,9 @@ export function resolveDefaultLlm(modelOverride?: string): Llm {
       return makeOpenAiCompatibleLlm({
         baseURL: process.env.PRINCIPLES_BASE_URL ?? "https://api.openai.com/v1",
         model: model ?? "gpt-4.1",
+        // Explicit precedence: never let a stray XAI_API_KEY (the gateway's
+        // first fallback) be sent to an OpenAI endpoint.
+        apiKey: process.env.OPENAI_API_KEY ?? process.env.PRINCIPLES_API_KEY,
       });
 
     case "xai":
@@ -41,6 +44,18 @@ export function resolveDefaultLlm(modelOverride?: string): Llm {
       warnIfMissing(["XAI_API_KEY", "PRINCIPLES_API_KEY"], "xAI Grok API");
       return makeGrokLlm(model ? { model } : {});
   }
+}
+
+/**
+ * Whether the resolved default provider supports LlmRequest.webTools
+ * (Claude WebSearch/WebFetch). The OpenAI-compatible gateway soft-degrades
+ * webTools; callers whose output integrity DEPENDS on live web (landscape
+ * survey citations, the bench bare-model arm) must consult this and skip or
+ * refuse rather than silently degrade.
+ */
+export function providerSupportsWebTools(): boolean {
+  const provider = (process.env.PRINCIPLES_PROVIDER ?? "xai").toLowerCase().trim();
+  return provider === "claude" || provider === "anthropic";
 }
 
 function warnIfMissing(keys: string | string[], label: string): void {

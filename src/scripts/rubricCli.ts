@@ -1,7 +1,7 @@
 import path from "path";
 import dotenv from "dotenv";
 dotenv.config();
-import { resolveDefaultLlm } from "../llm/resolveLlm";
+import { resolveDefaultLlm, providerSupportsWebTools } from "../llm/resolveLlm";
 import { compileRubric } from "../core/rubricCompiler";
 import { writeRubricArtifacts } from "../core/rubricRender";
 
@@ -14,7 +14,9 @@ const main = async () => {
 
   const llm = resolveDefaultLlm();
   console.log("Deriving and vetting truths, decomposing, compiling rubric...");
-  const rubric = await compileRubric(llm, objective);
+  const rubric = await compileRubric(llm, objective, undefined, {
+    webSurvey: providerSupportsWebTools(),
+  });
 
   if (rubric.assumptions.length > 0) {
     console.log("\nProceeding on these ASSUMPTIONS (correct me if wrong):");

@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { ZodError } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { Llm, LlmRequest } from "./gateway";
 
@@ -68,6 +69,12 @@ export function makeOpenAiCompatibleLlm(opts: OpenAiCompatibleGatewayOptions = {
     >;
     delete jsonSchema["$schema"];
 
+    // Corrective-feedback retry: unlike the Claude Agent SDK gateway (which
+    // validates structured output server-side), json_schema here is advisory
+    // (strict: false) and json_object validates nothing — so shape failures
+    // are expected and must be retried WITH feedback. At temperature 0 a
+    // blind retry reproduces the same response; appending the error as a
+    // corrective turn is what lets the resample converge.
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: system ?? DEFAULT_SYSTEM },
       {
@@ -79,6 +86,11 @@ export function makeOpenAiCompatibleLlm(opts: OpenAiCompatibleGatewayOptions = {
     ];
 
     let lastError: Error | undefined;
+
+    const correct = (badReply: string | null, instruction: string) => {
+      if (badReply) messages.push({ role: "assistant", content: truncateForFeedback(badReply) });
+      messages.push({ role: "user", content: instruction });
+    };
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
@@ -115,6 +127,7 @@ export function makeOpenAiCompatibleLlm(opts: OpenAiCompatibleGatewayOptions = {
           lastError = new Error(
             `OpenAI-compatible API returned empty content for schema "${schemaName}"`
           );
+          correct(null, `Your previous reply was empty. Respond with the single JSON object for schema "${schemaName}" only.`);
           continue;
         }
 
@@ -122,20 +135,31 @@ export function makeOpenAiCompatibleLlm(opts: OpenAiCompatibleGatewayOptions = {
         try {
           parsed = JSON.parse(stripCodeFences(text));
         } catch (parseErr) {
-          lastError = new Error(
-            `Failed to parse JSON for schema "${schemaName}": ${
-              parseErr instanceof Error ? parseErr.message : String(parseErr)
-            }`
+          const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+          lastError = new Error(`Failed to parse JSON for schema "${schemaName}": ${msg}`);
+          correct(
+            text,
+            `That reply was not parseable JSON (${msg}). Respond with a single valid JSON object matching the "${schemaName}" schema — no fences, no commentary.`
           );
           continue;
         }
 
-        return schema.parse(parsed);
-      } catch (err) {
-        // zod failures after a successful parse should not retry — surface immediately
-        if (err && typeof err === "object" && "name" in err && (err as any).name === "ZodError") {
-          throw err;
+        try {
+          return schema.parse(parsed);
+        } catch (zodErr) {
+          if (zodErr instanceof ZodError) {
+            const issues = summarizeZodIssues(zodErr);
+            lastError = new Error(`Schema validation failed for "${schemaName}": ${issues}`);
+            correct(
+              text,
+              `That JSON did not match the "${schemaName}" schema. Problems: ${issues}. Fix exactly these fields and respond with the corrected JSON object only.`
+            );
+            continue;
+          }
+          throw zodErr;
         }
+      } catch (err) {
+        // Transport/API errors: retry without a corrective turn.
         lastError = err instanceof Error ? err : new Error(String(err));
       }
     }
@@ -160,4 +184,18 @@ function stripCodeFences(text: string): string {
   const trimmed = text.trim();
   const fence = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   return fence ? fence[1].trim() : trimmed;
+}
+
+/** Echo of a bad reply in a corrective turn, capped so retries can't balloon the context. */
+function truncateForFeedback(text: string, max = 2000): string {
+  return text.length <= max ? text : `${text.slice(0, max)}\n…[truncated]`;
+}
+
+/** Compact, field-addressed summary of Zod issues for the corrective turn. */
+function summarizeZodIssues(err: ZodError, maxIssues = 8): string {
+  const issues = err.issues
+    .slice(0, maxIssues)
+    .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`);
+  const extra = err.issues.length > maxIssues ? `; +${err.issues.length - maxIssues} more` : "";
+  return issues.join("; ") + extra;
 }

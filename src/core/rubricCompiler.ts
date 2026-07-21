@@ -3,7 +3,7 @@ import { z } from "zod";
 import { Llm } from "../llm/gateway";
 import { refine, RefineFeedback } from "../shared/refine";
 import { judge } from "../shared/judge";
-import { deriveFoundations } from "./foundations";
+import { deriveFoundations, FoundationsOptions } from "./foundations";
 
 export type LoopStatus = "converged" | "escalated" | "exhausted";
 
@@ -231,9 +231,10 @@ export async function gradeabilityCheck(
 export async function compileRubric(
   llm: Llm,
   objective: string,
-  now: () => Date = () => new Date()
+  now: () => Date = () => new Date(),
+  opts: FoundationsOptions = {}
 ): Promise<CompiledRubric> {
-  const f = await deriveFoundations(llm, objective);
+  const f = await deriveFoundations(llm, objective, opts);
   const drafted = draftCriteria(f.truths, f.subtasks);
   const guided = await addEvidenceGuidance(llm, objective, drafted);
   const checked = await gradeabilityCheck(llm, objective, guided);

@@ -4,7 +4,7 @@ dotenv.config();
 import fs from "fs";
 import { Llm } from "../llm/gateway";
 import { makeClaudeAgentSdkLlm } from "../llm/claudeGateway";
-import { resolveDefaultLlm } from "../llm/resolveLlm";
+import { resolveDefaultLlm, providerSupportsWebTools } from "../llm/resolveLlm";
 import { parseRowsPages, sampleTasks, buildPilotManifest, ResearchTask, PilotManifest } from "../bench/researchLoader";
 import { runBareArm, runPrinciplesArm, realRunners, PrinciplesRunners } from "../bench/researchArms";
 
@@ -401,6 +401,16 @@ if (require.main === module) {
   const rawArgv = process.argv.slice(2);
   const confirmYes = rawArgv.includes("--yes");
   const argvForRun = rawArgv.filter((a) => a !== "--yes");
+
+  // The bare-model baseline arm's identity is "bare model WITH web access"
+  // (CLAUDE.md invariant 1). On a web-less provider the comparison is
+  // corrupted, not degraded — refuse rather than warn.
+  if (argvForRun[0] === "run" && !providerSupportsWebTools()) {
+    console.error(
+      "research-pilot run requires a web-capable provider (the bare-model arm depends on live web access). Set PRINCIPLES_PROVIDER=claude."
+    );
+    process.exit(2);
+  }
 
   const deps: PilotDeps = {
     llm: resolveDefaultLlm(),

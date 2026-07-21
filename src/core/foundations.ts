@@ -62,8 +62,30 @@ function buildFrameSummary(d: DecompositionResult): string {
  * Consumed by both generateOntology (which adds agent specs) and
  * compileRubric (which stops here).
  */
-export async function deriveFoundations(llm: Llm, objective: string): Promise<Foundations> {
-  const survey = await surveyLandscape(llm, objective);
+export interface FoundationsOptions {
+  /**
+   * Set false when the provider has no web tools (see
+   * providerSupportsWebTools): the landscape survey is SKIPPED rather than
+   * run web-less, because its contract is sourced, checkable citations — a
+   * web-less model produces authoritative-looking sources from training
+   * data, and fabricated citations must not enter the vetted-truth pipeline.
+   */
+  webSurvey?: boolean;
+}
+
+export async function deriveFoundations(
+  llm: Llm,
+  objective: string,
+  opts: FoundationsOptions = {}
+): Promise<Foundations> {
+  let survey: Observation[] = [];
+  if (opts.webSurvey === false) {
+    console.warn(
+      "[foundations] landscape survey skipped: provider has no web tools, so survey citations would be unverifiable (PRINCIPLES_PROVIDER=claude enables it)"
+    );
+  } else {
+    survey = await surveyLandscape(llm, objective);
+  }
   const derived = await deriveTruths(llm, objective, survey);
   const vet = await vetTruths(llm, objective, derived, survey);
   const truths = [...vet.kept, ...vet.assumptions];

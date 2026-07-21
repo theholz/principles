@@ -102,6 +102,78 @@ describe("makeOpenAiCompatibleLlm", () => {
     expect(formats).toEqual(["json_schema", "json_object"]);
   });
 
+  it("retries schema-mismatch with a corrective turn instead of aborting", async () => {
+    let calls = 0;
+    const bodies: any[] = [];
+    const llm = makeOpenAiCompatibleLlm({
+      apiKey: "test",
+      create: async (body) => {
+        calls++;
+        // Snapshot messages at call time — the gateway mutates the array between attempts.
+        bodies.push({ ...body, messages: [...(body as any).messages] });
+        // 1st reply parses as JSON but fails the schema (answer is a number)
+        if (calls === 1)
+          return { choices: [{ message: { content: JSON.stringify({ answer: 42 }) } }] } as any;
+        return { choices: [{ message: { content: JSON.stringify({ answer: "42" }) } }] } as any;
+      },
+    });
+    const result = await llm({
+      prompt: "q",
+      schema: z.object({ answer: z.string() }),
+      schemaName: "typed_truths",
+    });
+    expect(result).toEqual({ answer: "42" });
+    expect(calls).toBe(2);
+    // The retry request must carry the bad reply + a corrective user turn naming the field
+    const retryMessages = bodies[1].messages;
+    expect(retryMessages.length).toBeGreaterThan(bodies[0].messages.length);
+    const lastUserTurn = retryMessages[retryMessages.length - 1];
+    expect(lastUserTurn.role).toBe("user");
+    expect(lastUserTurn.content).toContain("answer");
+  });
+
+  it("throws after MAX_ATTEMPTS persistent schema failures (no infinite loop, no raw ZodError)", async () => {
+    let calls = 0;
+    const llm = makeOpenAiCompatibleLlm({
+      apiKey: "test",
+      create: async () => {
+        calls++;
+        return { choices: [{ message: { content: JSON.stringify({ answer: 42 }) } }] } as any;
+      },
+    });
+    await expect(
+      llm({
+        prompt: "q",
+        schema: z.object({ answer: z.string() }),
+        schemaName: "typed_truths",
+      })
+    ).rejects.toThrow(/after 5 attempts.*Schema validation failed/s);
+    expect(calls).toBe(5);
+  });
+
+  it("appends a corrective turn on unparseable JSON before retrying", async () => {
+    let calls = 0;
+    const bodies: any[] = [];
+    const llm = makeOpenAiCompatibleLlm({
+      apiKey: "test",
+      create: async (body) => {
+        calls++;
+        bodies.push({ ...body, messages: [...(body as any).messages] });
+        if (calls === 1)
+          return { choices: [{ message: { content: "Sure! Here is the JSON you asked for: {broken" } }] } as any;
+        return { choices: [{ message: { content: JSON.stringify({ a: "ok" }) } }] } as any;
+      },
+    });
+    const result = await llm({
+      prompt: "q",
+      schema: z.object({ a: z.string() }),
+      schemaName: "test",
+    });
+    expect(result).toEqual({ a: "ok" });
+    const retryMessages = bodies[1].messages;
+    expect(retryMessages[retryMessages.length - 1].content).toMatch(/not parseable JSON/);
+  });
+
   it("warns but continues when webTools is requested", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const llm = makeOpenAiCompatibleLlm({
