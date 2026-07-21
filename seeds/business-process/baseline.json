@@ -1,0 +1,460 @@
+[
+  {
+    "name": "engram-stack-running",
+    "kind": "stack",
+    "location": "docker compose (engram)",
+    "status": "built",
+    "receipt": "docker ps: brain-api  Up 5 hours (healthy)  0.0.0.0:8093->8093/tcp, 0.0.0.0:9091->9091/tcp",
+    "note": "One summary row for the live Engram stack: brain-api, deep-agent-worker, supabase-*, temporal, neo4j, redis, caddy all Up (verified 2026-07-21)."
+  },
+  {
+    "name": "coding-lane-pipeline",
+    "kind": "pipeline",
+    "location": "/home/tait/Projects/engram/agent/coding_lane/graph.py",
+    "status": "built",
+    "receipt": "engram/agent/coding_lane/graph.py:1 'Coding-lane StateGraph \u2014 nodes under the main Engram stack (not dev_pipeline)'",
+    "note": "The shipped implement-lane process; WL-PROC-05 names it the model for phase-bound process packs."
+  },
+  {
+    "name": "coding-lane-fidelity-gates",
+    "kind": "gate",
+    "location": "/home/tait/Projects/engram/agent/coding_lane/fidelity.py",
+    "status": "built",
+    "receipt": "engram/agent/coding_lane/fidelity.py:1 'WL-GOV-03 \u2014 coding_lane process fidelity checks (plan structure + implement receipt)'",
+    "note": "Deterministic no-LLM gates on plan structure and implement receipts \u2014 the shipped pattern any new process fidelity gate should reuse."
+  },
+  {
+    "name": "coding-lane-process-pack",
+    "kind": "pack-loader",
+    "location": "/home/tait/Projects/engram/agent/coding_lane/process_pack.py",
+    "status": "built",
+    "receipt": "engram/agent/coding_lane/process_pack.py:1 'Superpowers process pack for coding_lane' \u2014 pinned skills, not freeform skill_router",
+    "note": "Deterministic skill binding into plan/implement stages; precedent for the WL-PROC-05 'deterministic binding, router only for discovery' rule."
+  },
+  {
+    "name": "coding-lane-daytona-sandbox",
+    "kind": "integration",
+    "location": "/home/tait/Projects/engram/agent/coding_lane/sandbox.py",
+    "status": "built",
+    "receipt": "engram/agent/coding_lane/sandbox.py:1 'Daytona lifecycle for coding_lane (D-039 family snapshots)'",
+    "note": "D-029/D-039 sandboxed execution plane for the implement process."
+  },
+  {
+    "name": "d065-adversarial-review-gate",
+    "kind": "hook",
+    "location": "/home/tait/Projects/engram/.claude/hooks/check_adversarial_review.sh",
+    "status": "built",
+    "receipt": "engram/.claude/hooks/check_adversarial_review.sh:2 'PreToolUse (Bash / run_terminal_command): D-065 adversarial review gate' \u2014 blocks non-trivial commits to main without receipt",
+    "note": "The enforcement point of the review process; wired PreToolUse for Claude/Grok/Cursor per docs/PROCESSES.md:174."
+  },
+  {
+    "name": "adversarial-review-receipt-cli",
+    "kind": "cli",
+    "location": "/home/tait/Projects/engram/bin/record-adversarial-review",
+    "status": "built",
+    "receipt": "engram/bin/record-adversarial-review:2 'Record a D-065 adversarial review receipt for the current git index' \u2014 staged-tree hash, 24h max age",
+    "note": "Receipt producer paired with the gate; bin/approve-skip provides the audited bypass."
+  },
+  {
+    "name": "governance-context-inheritance",
+    "kind": "library",
+    "location": "/home/tait/Projects/engram/agent/governance/context.py",
+    "status": "built",
+    "receipt": "engram/agent/governance/context.py:1 'Parent\u2192child governance context (D-024 / WL-GOV-04 / WL-26)'",
+    "note": "Child agents / Daytona workspaces inherit grounding mode, role, tool allowlist by construction \u2014 process-context propagation already exists."
+  },
+  {
+    "name": "process-improvement-scan",
+    "kind": "endpoint",
+    "location": "/home/tait/Projects/engram/agent/routes/workflow.py",
+    "status": "built",
+    "receipt": "engram/agent/routes/workflow.py:50 @router.post(\"/process-improvement/scan\")",
+    "note": "Joins workflow_registry process failures into needs-review (service: agent/services/process_improvement.py:1, 'Does NOT auto-edit skills (D-044)'). Shipped by WL-PROC-06."
+  },
+  {
+    "name": "needs-review-queue",
+    "kind": "endpoint",
+    "location": "/home/tait/Projects/engram/agent/routes/workflow.py",
+    "status": "built",
+    "receipt": "engram/agent/routes/workflow.py:40 async def get_needs_review_endpoint()",
+    "note": "Attention queue receiving process-failure and retrospective signals; UI surface still pending per WL-PROC-06."
+  },
+  {
+    "name": "workflow-registry-eval",
+    "kind": "service",
+    "location": "/home/tait/Projects/engram/agent/services/workflow_eval.py",
+    "status": "built",
+    "receipt": "engram/agent/routes/workflow.py:7 'from services.workflow_eval import record_workflow, query_constraints, get_needs_review, promote_tier'",
+    "note": "Record/query/promote machinery behind the v2 measure loop \u2014 the capture-process data plane."
+  },
+  {
+    "name": "retrospective-cadence-check",
+    "kind": "service",
+    "location": "/home/tait/Projects/engram/agent/services/retrospective_cadence.py",
+    "status": "built",
+    "receipt": "engram/agent/services/retrospective_cadence.py:1 'Retrospective cadence check (D-043 / WL-45)' \u2014 fires needs-review on 5 merged PRs or 2 weeks",
+    "note": "Deliberately does not auto-author (D-043 clause 2 requires cross-model participation) \u2014 capture-process trigger, not author."
+  },
+  {
+    "name": "pr-cross-family-review",
+    "kind": "service",
+    "location": "/home/tait/Projects/engram/agent/services/pr_cross_family_review.py",
+    "status": "built",
+    "receipt": "engram/agent/services/pr_cross_family_review.py:1 'Cross-family PR review assignment (D-054)' \u2014 aging draft PR gets the opposite family (grok \u2194 claude) assigned",
+    "note": "Review-process routing; merge stays human/gated after non-author review (D-008/D-033)."
+  },
+  {
+    "name": "session-start-advisory",
+    "kind": "hook",
+    "location": "/home/tait/Projects/engram/.claude/hooks/session_start_advisory.sh",
+    "status": "built",
+    "receipt": "engram/.claude/hooks/session_start_advisory.sh:2 'SessionStart hook: surface current state so the agent picks up where the operator left off'",
+    "note": "Intake-process machinery: branch/dirty/plans/skill suggestion + D-066 transcript-not-SoT banner on resume; Grok twin at .grok/hooks/engram/session_start_advisory.py."
+  },
+  {
+    "name": "session-start-memory-projection",
+    "kind": "hook",
+    "location": "/home/tait/Projects/engram/.claude/hooks/session_start_memory_projection.sh",
+    "status": "built",
+    "receipt": "engram/.claude/hooks/session_start_memory_projection.sh:2 'SessionStart: best-effort brain \u2192 MEMORY.md projection (WS3 / D-053)' \u2014 trusted-tier SQL render only",
+    "note": "Brain-is-SoT projection into the session; the capture/retro processes must write where this reads."
+  },
+  {
+    "name": "memory-ingest-router",
+    "kind": "service",
+    "location": "/home/tait/Projects/engram/agent/memory_ingest.py",
+    "status": "built",
+    "receipt": "engram/agent/memory_ingest.py:1 'Central memory ingest router \u2014 DNA-Cleanup & Router spec. Single entry point for all memory writes.'",
+    "note": "Capture-process substrate: classification, W-tags, provenance-bearing writes."
+  },
+  {
+    "name": "memory-distill-ingest-guards",
+    "kind": "gate",
+    "location": "/home/tait/Projects/engram/agent/memory_distill/ingest_guards.py",
+    "status": "built",
+    "receipt": "engram/agent/memory_distill/ingest_guards.py:1 'Deterministic ingest guards for memory_distill (and reusable janitors)'; reject counter at memory_distill/pipeline.py:24",
+    "note": "Deterministic reject path + refuse-to-leak sanitize \u2014 the pattern for guarded capture."
+  },
+  {
+    "name": "ingestion-kill-switch",
+    "kind": "gate",
+    "location": "/home/tait/Projects/engram/agent/ingestion_gate.py",
+    "status": "built",
+    "receipt": "engram/agent/ingestion_gate.py:1 'Kill switch for capture + scout ingestion during rebuilds or maintenance' \u2014 INGESTION_PAUSED fails soft everywhere",
+    "note": "Operational pause control any scheduled process must respect."
+  },
+  {
+    "name": "temporal-deep-agent-worker",
+    "kind": "worker",
+    "location": "/home/tait/Projects/engram/agent/deep_agent/worker.py",
+    "status": "built",
+    "receipt": "docker ps: deep-agent-worker  Up 5 hours  0.0.0.0:9092->9092/tcp; code: engram/agent/deep_agent/worker.py:1 'Engram deep-agent Temporal worker entry point'",
+    "note": "Registers workflows + activities on the deep-agent task queue (schedules.py alongside) \u2014 the shipped home for durable scheduled processes."
+  },
+  {
+    "name": "orchestrator-log-discipline",
+    "kind": "doc-sot",
+    "location": "/home/tait/Projects/engram/docs/superpowers/operator-notes/ORCHESTRATOR-LOG.md",
+    "status": "built",
+    "receipt": "engram/docs/superpowers/operator-notes/ORCHESTRATOR-LOG.md:3 'SoT for multi-agent gate notes (D-058). Append-only.'",
+    "note": "Gate-note discipline the compiled processes should write into, not replace."
+  },
+  {
+    "name": "phase-status-discipline",
+    "kind": "doc-sot",
+    "location": "/home/tait/Projects/engram/docs/superpowers/operator-notes/PHASE-STATUS.md",
+    "status": "built",
+    "receipt": "engram/docs/superpowers/operator-notes/PHASE-STATUS.md:3 'SoT for where are we. Update when waves/phases change.'",
+    "note": "Phase-tracking discipline file; plan/implement processes report here."
+  },
+  {
+    "name": "shared-operator-sot",
+    "kind": "doc-sot",
+    "location": "/home/tait/Projects/engram/docs/superpowers/WORKLIST.md",
+    "status": "built",
+    "receipt": "engram/docs/superpowers/WORKLIST.md:25 WL-PROC-05: 'processes to be defined via the process factory ... scope includes engram AND agt_full'",
+    "note": "D-015 shared state (WORKLIST + DECISIONS + PLATFORM-SOT, all verified present). WL-PROC-05 is this engagement's own worklist row \u2014 the compile is already chartered there."
+  },
+  {
+    "name": "processes-doc",
+    "kind": "doc-sot",
+    "location": "/home/tait/Projects/engram/docs/PROCESSES.md",
+    "status": "built",
+    "receipt": "engram/docs/PROCESSES.md:139 'Non-trivial \u2192 adversarial review before land on main. Author cannot be the sole reviewer.'",
+    "note": "The lived process manual; compiled processes must compose with it, not contradict it."
+  },
+  {
+    "name": "skill-router",
+    "kind": "service",
+    "location": "/home/tait/Projects/engram/agent/tools/skill_router.py",
+    "status": "partial",
+    "receipt": "engram/agent/tools/skill_router.py:2 'Skill retrieval pipeline: vector \u2192 graph-expand \u2192 Voyage rerank \u2192 tiebreaker'",
+    "note": "DEPRECATED for process flows per WL-PROC-05 (found inaccurate \u2014 the finding that led to the process factory); retained for genuine discovery only. Do not bind processes through it."
+  },
+  {
+    "name": "retrospectives-corpus",
+    "kind": "doc-sot",
+    "location": "/home/tait/Projects/engram/docs/superpowers/retrospectives/",
+    "status": "built",
+    "receipt": "ls docs/superpowers/retrospectives/ \u2192 2026-07-16-retrospective.md, 2026-07-18-retrospective.md, 2026-07-18-post-deploy-and-todo-dispatch-retrospective.md",
+    "note": "Capture-process output corpus; feeds the cadence check's date math."
+  },
+  {
+    "name": "agt-stack-running",
+    "kind": "stack",
+    "location": "docker compose (agt_full)",
+    "status": "built",
+    "receipt": "docker ps: agt_full-governance-advisor-1  Up 5 hours  0.0.0.0:8095->8095/tcp",
+    "note": "One summary row for the live AGT stack: governance-advisor, dashboard (:8501), verdict-watchdog, qdrant, dev containers all Up (verified 2026-07-21)."
+  },
+  {
+    "name": "governance-advisor-service",
+    "kind": "service",
+    "location": "/home/tait/Projects/agt_full/services/governance-advisor/",
+    "status": "built",
+    "receipt": "curl :8095/health \u2192 {\"status\":\"ok\",\"service\":\"governance-advisor\",\"version\":\"0.1.0\",\"isolation\":\"agt-host-level\",\"scope_count\":18,...}",
+    "note": "Host governance plane (D-053 dual-plane): enforce, grounding, judge, map, briefing APIs \u2014 the may-I-act authority every compiled process defers to. OPERATIVE TRUTH (operator 2026-07-21): implemented plane = default Microsoft agent-governance product + augmentations; docs describing coach-loop/trust variants are intent-tier and conflict \u2014 do not build against them."
+  },
+  {
+    "name": "agt-grounding-sensor",
+    "kind": "endpoint",
+    "location": "/home/tait/Projects/agt_full/services/governance-advisor/src/governance_advisor/routes/grounding.py",
+    "status": "built",
+    "receipt": "agt_full services/governance-advisor/src/governance_advisor/routes/grounding.py:35 @router.post(\"/sensor\", response_model=GroundingSensorResponse)",
+    "note": "Deterministic citation verification; review and capture processes should route file:line claims here instead of re-reading themselves."
+  },
+  {
+    "name": "agt-enforce-gate",
+    "kind": "endpoint",
+    "location": "/home/tait/Projects/agt_full/services/governance-advisor/src/governance_advisor/routes/enforce.py",
+    "status": "built",
+    "receipt": "agt_full services/governance-advisor/src/governance_advisor/routes/enforce.py:59 @router.post(\"/evaluate\", response_model=EnforceDecision)",
+    "note": "Deterministic may-I-act decision keyed on surface_id \u2014 the enforcement primitive for per-agent process intensity."
+  },
+  {
+    "name": "agent-surfaces-registry",
+    "kind": "registry",
+    "location": "/home/tait/Projects/agt_full/policies/agent-surfaces-registry.yaml",
+    "status": "built",
+    "receipt": "agt_full/policies/agent-surfaces-registry.yaml:26 '- surface_id: claude-code' (canonical host MAP, primary identity axis)",
+    "note": "WL-PROC-05: process constant, enforcement calibrated per agent \u2014 this registry is the calibration key."
+  },
+  {
+    "name": "control-plane-state",
+    "kind": "config",
+    "location": "/home/tait/Projects/agt_full/config/control-plane/",
+    "status": "built",
+    "receipt": "agt_full/config/control-plane/scopes.json:1-3 version 2, updated_at 2026-07-21T15:35:08Z; grants.json version 1 alongside",
+    "note": "Live grants/scopes/rego state \u2014 updated the day of this audit; processes that need standing permissions register here."
+  },
+  {
+    "name": "agt-flight-recorder",
+    "kind": "log",
+    "location": "/home/tait/Projects/agt_full/config/control-plane/flight-recorder.jsonl",
+    "status": "built",
+    "receipt": "wc -l config/control-plane/flight-recorder.jsonl \u2192 95285 lines",
+    "note": "Append-only decision record \u2014 the audit substrate an accord-sweep process would read. Being orchestrated with Langfuse for scoring (operator 2026-07-21)."
+  },
+  {
+    "name": "agt-policy-pack",
+    "kind": "policy",
+    "location": "/home/tait/Projects/agt_full/policies/",
+    "status": "built",
+    "receipt": "agt_full/policies/governance.yaml:1 'Protected-repo operator lockdown \u2014 ACS governance (models A + D)'",
+    "note": "governance.yaml, judge-policy, model-assignment-guard, model-families-registry, protected-repos-registry, shadow-sensors, trust-root-allowlist all present (ls verified)."
+  },
+  {
+    "name": "retrospective-gate-policy",
+    "kind": "policy",
+    "location": "/home/tait/Projects/agt_full/policies/retrospective-gate.yaml",
+    "status": "built",
+    "receipt": "agt_full/policies/retrospective-gate.yaml:1 'Retrospective cadence hard gate (D-043 -> enforceable; agt_full policy)' \u2014 ALWAYS ENFORCE, not yolo-bypassable",
+    "note": "Hard-gate twin of engram's advisory cadence check \u2014 the capture process already has enforcement on both planes."
+  },
+  {
+    "name": "verdict-watchdog",
+    "kind": "service",
+    "location": "/home/tait/Projects/agt_full/services/verdict-watchdog/",
+    "status": "built",
+    "receipt": "docker ps: agt_full-verdict-watchdog-1  Up 5 hours; source dir services/verdict-watchdog/{src,tests,config} present",
+    "note": "Companion watchdog service to the advisor (watchdog-state.json in control-plane); internals not audited here."
+  },
+  {
+    "name": "process-factory-meta-pack",
+    "kind": "process-pack",
+    "location": "/home/tait/Projects/engram-plugins/plugins/process-factory-meta/0.1.0",
+    "status": "built",
+    "receipt": "engram-plugins/plugins/process-factory-meta/0.1.0/process-spec.json:5 problemStatement 'Operate the process factory: take in problems, gate every spec on operator approval...'",
+    "note": "The factory's own deployed pack: process-spec.json + skills/ + gates/ + hooks/ + manifest/ (forge-handoff.json, metrics.json) all present."
+  },
+  {
+    "name": "factory-registry",
+    "kind": "registry",
+    "location": "/home/tait/Projects/engram-plugins/factory-registry.json",
+    "status": "built",
+    "receipt": "engram-plugins/factory-registry.json:3 \"name\": \"process-factory-meta\" with metricsLocation plugins/process-factory-meta/0.1.0/manifest/metrics.json",
+    "note": "Deployment registry the compile's emitted pack must also be entered into."
+  },
+  {
+    "name": "factory-intake-skill",
+    "kind": "skill",
+    "location": "/home/tait/Projects/engram-plugins/plugins/process-factory-meta/0.1.0/skills/factory-intake",
+    "status": "built",
+    "receipt": "skills/factory-intake/SKILL.md:2 name: \"factory-intake\" \u2014 'Intake is an operator-facing procedure, not an enforcement point'",
+    "note": "Already-shipped intake procedure for the factory itself; the business-process intake should compose with it, not duplicate it."
+  },
+  {
+    "name": "spec-approval-gate-stub",
+    "kind": "gate",
+    "location": "/home/tait/Projects/engram-plugins/plugins/process-factory-meta/0.1.0/gates/spec-approval-gate.md",
+    "status": "partial",
+    "receipt": "gates/spec-approval-gate.md:3 'Not live gate code. This file is a deterministic spec stub emitted by the process-pack emitter.'",
+    "note": "Contract only \u2014 live hook/gate scripts are an acknowledged later factory task. Triage must treat gate EMISSION as built but gate ENFORCEMENT as partial."
+  },
+  {
+    "name": "skill-forge-plugin",
+    "kind": "plugin",
+    "location": "/home/tait/Projects/engram-plugins/plugins/skill-forge",
+    "status": "built",
+    "receipt": "engram-plugins/plugins/skill-forge/skills/skill-forge/SKILL.md:2 name: skill-forge (DESIGN.md, README.md, skill-repo.md alongside)",
+    "note": "WL-PROC-05 amendment: skill-shaped outputs go via skill-forge handoff only \u2014 the sanctioned skill emission path."
+  },
+  {
+    "name": "methodologies-plugin",
+    "kind": "plugin",
+    "location": "/home/tait/Projects/engram-plugins/plugins/methodologies",
+    "status": "built",
+    "receipt": "ls engram-plugins/plugins/methodologies/skills \u2192 dmaic, first-principles, persona-interview, theory-of-constraints (dmaic/SKILL.md verified)",
+    "note": "Improvement-method skills the compiled processes should bind deterministically (DMAIC for improve loops, TOC for flow analysis)."
+  },
+  {
+    "name": "dev-workflow-plugin",
+    "kind": "plugin",
+    "location": "/home/tait/Projects/engram-plugins/plugins/dev-workflow",
+    "status": "built",
+    "receipt": "ls engram-plugins/plugins/dev-workflow/skills \u2192 context-optimization, definition-of-done, engram-onboarding, extension-e2e-test, feature-framework, gitnexus (feature-framework/SKILL.md verified)",
+    "note": "feature-framework and definition-of-done are direct plan/review process inputs; gitnexus backs the discovery-first code-change protocol."
+  },
+  {
+    "name": "litellm",
+    "kind": "service",
+    "location": "localhost:4040",
+    "status": "built",
+    "receipt": "curl :4040/health/liveliness \u2192 \"I'm alive!\"; docker ps: litellm  Up 9 hours (healthy)  0.0.0.0:4040->4000/tcp",
+    "note": "Single model gateway; D-025 request-queue discipline governs how processes call models. Roles via LiteLLM/platform_config (D-028: no silent vendor defaults)."
+  },
+  {
+    "name": "infisical",
+    "kind": "service",
+    "location": "localhost:8086",
+    "status": "built",
+    "receipt": "docker ps: infisical  Up 9 hours  443/tcp, 0.0.0.0:8086->8080/tcp (infisical-db, infisical-redis healthy alongside)",
+    "note": "WL-SECRETS-01: secrets SoT \u2014 processes must fetch credentials from here, never inline them."
+  },
+  {
+    "name": "langfuse",
+    "kind": "service",
+    "location": "localhost:3100",
+    "status": "built",
+    "receipt": "docker ps: langfuse-web  Up 9 hours  0.0.0.0:3100->3000/tcp (langfuse-worker, langfuse-db, clickhouse, redis alongside)",
+    "note": "Observability/tracing \u2014 the measurement substrate for process metrics manifests. Scoring orchestration with the AGT flight recorder is IN PROGRESS (operator 2026-07-21) \u2014 the target integration for process scoring; agents defining measure-stages should integrate here."
+  },
+  {
+    "name": "n8n",
+    "kind": "service",
+    "location": "localhost:5678",
+    "status": "built",
+    "receipt": "docker ps: n8n  Up 9 hours (healthy)  0.0.0.0:5678->5678/tcp",
+    "note": "Scheduling \u2014 the intended future home for scan cadences (process-improvement scan, accord sweeps) that are currently manual."
+  },
+  {
+    "name": "temporal",
+    "kind": "service",
+    "location": "localhost:7233",
+    "status": "built",
+    "receipt": "docker ps: temporal  Up 5 hours (healthy)  0.0.0.0:7233->7233/tcp (temporal-ui :8090, temporal-db alongside)",
+    "note": "Durable workflow engine backing deep-agent worker and scheduled ingestion \u2014 the alternative scheduling home to n8n for in-code processes."
+  },
+  {
+    "name": "daytona",
+    "kind": "service",
+    "location": "localhost:3986",
+    "status": "built",
+    "receipt": "docker ps: daytona-api  Up 9 hours (healthy)  0.0.0.0:3986->3000/tcp (daytona-runner, daytona-registry, daytona-dex alongside)",
+    "note": "D-029/D-039: sandbox execution plane \u2014 Claude Code inside Engram runs sandboxed Daytona only, never host-reaching."
+  },
+  {
+    "name": "postgres-supabase",
+    "kind": "service",
+    "location": "localhost:5432",
+    "status": "built",
+    "receipt": "docker ps: supabase-db  Up 5 hours (healthy)  0.0.0.0:5432->5432/tcp (kong, auth, rest, realtime, storage, studio all healthy)",
+    "note": "Brain store (D-053: brain is SoT for decisions/preferences/session facts); workflow_registry and memory tables live here."
+  },
+  {
+    "name": "neo4j",
+    "kind": "service",
+    "location": "localhost:7474",
+    "status": "built",
+    "receipt": "docker ps: neo4j  Up 5 hours (healthy)  0.0.0.0:7474->7474/tcp, 0.0.0.0:7687->7687/tcp",
+    "note": "Graph store (skill graph expansion, entity graph)."
+  },
+  {
+    "name": "qdrant",
+    "kind": "service",
+    "location": "localhost:6333",
+    "status": "built",
+    "receipt": "docker ps: agt_full-qdrant-1  Up 5 hours  0.0.0.0:6333-6334->6333-6334/tcp",
+    "note": "Vector store. NOTE: the only running qdrant belongs to the agt_full compose project \u2014 engram-side consumers share it or run without one; worth an operator look."
+  },
+  {
+    "name": "multi-agent-working-copy-protocol",
+    "kind": "process",
+    "location": "",
+    "status": "gap",
+    "note": "2026-07-21 incident: Grok merge-flow reset local main and dropped sibling unpushed commits \u2014 engram reflog verified today: HEAD@{120} fb46dc6e 'reset: moving to origin/main'. No shipped protocol governs concurrent working copies across agents (D-016 branch+draft-PR covers intent, not working-copy mechanics)."
+  },
+  {
+    "name": "scheduled-graded-memory-scoring",
+    "kind": "process",
+    "location": "",
+    "status": "gap",
+    "note": "FORWARD framing (operator 2026-07-21): scoring lands via the Langfuse x flight-recorder orchestration in progress \u2014 measure-stages integrate there; no reconciliation of historical scoring designs."
+  },
+  {
+    "name": "business-process-definitions",
+    "kind": "process",
+    "location": "",
+    "status": "gap",
+    "note": "The engagement target itself: intake/plan/implement/review/capture/accord-sweep as phase-bound packs (WL-PROC-05 ACTIVE via the process factory). Only the coding_lane implement-lane exists today \u2014 triage must not mistake this gap for the substrate above being missing."
+  },
+  {
+    "name": "accord-sweep-automation",
+    "kind": "process",
+    "location": "",
+    "status": "gap",
+    "note": "D-067 (DECISIONS.md:16) names accord sweeps as the code-as-spec migration mechanism; no automation ships. Flight recorder + retrospective gates are substrate for it, not the sweep itself."
+  },
+  {
+    "name": "coach-loop-autonomy-parallel-eval",
+    "kind": "program",
+    "location": "",
+    "status": "gap",
+    "note": "Parked intent: run homegrown coach loop + autonomy IN PARALLEL with the default Microsoft hypervisor/SRE product on the same data, then keep one. Not implemented. Operator leaning (2026-07-21): use the default product until a second governance product gets dedicated time; what needs finishing is process, orchestration, integrations."
+  },
+  {
+    "name": "canonical-operator-plane",
+    "kind": "process",
+    "location": "",
+    "status": "gap",
+    "note": "S18.1 violation, live example (operator 2026-07-21): duplicate operator planes \u2014 superpowers/operator-copilot (AUDIT-LEDGER, NORTH-STAR) vs operator-notes (MASTER-TODO, PHASE-STATUS, ORCHESTRATOR-LOG) vs superpowers root (DECISIONS, WORKLIST, plans/) vs docs root (PROCESSES, SYSTEM-CAPABILITIES, PLATFORM-SOT) \u2014 Grok and Claude building the same thing in different places. Consolidation to one canonical home per artifact type is an intake/capture process requirement."
+  },
+  {
+    "name": "governance-process-templates",
+    "kind": "reference",
+    "location": "/home/tait/Documents/trading/docs/governance/templates",
+    "status": "partial",
+    "receipt": "ls 2026-07-21: 24 templates (Jan 2026) incl. retrospective, change-control-request, rule-change-request, error-pattern, service-metrics, planning, task-list",
+    "note": "Operator-authored kit for a self-improving measurable system; intent-tier input \u2014 retrospective/change-control/rule-change/error-pattern templates map onto capture/review/propose/improve processes."
+  }
+]
