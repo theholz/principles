@@ -4,7 +4,7 @@ dotenv.config();
 import { execSync } from "child_process";
 import fs from "fs";
 import { Llm } from "../llm/gateway";
-import { makeClaudeAgentSdkLlm } from "../llm/claudeGateway";
+import { resolveDefaultLlm } from "../llm/resolveLlm";
 import { failures } from "../shared/types";
 import { loadRubricCriteria, judgeDiff, renderVerdictTable, COMMENT_MARKER } from "../core/diffJudge";
 
@@ -107,11 +107,8 @@ export async function run(argv: string[], deps: JudgeDiffDeps): Promise<number> 
 
 /* istanbul ignore next -- thin binding, covered by the live gate */
 if (require.main === module) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn("ANTHROPIC_API_KEY is not set — relying on local Claude Code credentials if available.");
-  }
   const deps: JudgeDiffDeps = {
-    llm: makeClaudeAgentSdkLlm(),
+    llm: resolveDefaultLlm(),
     exec: (cmd) => execSync(cmd, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 }),
     readFile: (p) => fs.readFileSync(path.resolve(p), "utf8"),
     log: console.log,

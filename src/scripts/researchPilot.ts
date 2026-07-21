@@ -4,6 +4,7 @@ dotenv.config();
 import fs from "fs";
 import { Llm } from "../llm/gateway";
 import { makeClaudeAgentSdkLlm } from "../llm/claudeGateway";
+import { resolveDefaultLlm, providerSupportsWebTools } from "../llm/resolveLlm";
 import { parseRowsPages, sampleTasks, buildPilotManifest, ResearchTask, PilotManifest } from "../bench/researchLoader";
 import { runBareArm, runPrinciplesArm, realRunners, PrinciplesRunners } from "../bench/researchArms";
 
@@ -397,15 +398,22 @@ export async function run(argv: string[], deps: PilotDeps): Promise<number> {
 
 /* istanbul ignore next -- thin binding, covered by the live gate */
 if (require.main === module) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn("ANTHROPIC_API_KEY is not set — relying on local Claude Code credentials if available.");
-  }
   const rawArgv = process.argv.slice(2);
   const confirmYes = rawArgv.includes("--yes");
   const argvForRun = rawArgv.filter((a) => a !== "--yes");
 
+  // The bare-model baseline arm's identity is "bare model WITH web access"
+  // (CLAUDE.md invariant 1). On a web-less provider the comparison is
+  // corrupted, not degraded — refuse rather than warn.
+  if (argvForRun[0] === "run" && !providerSupportsWebTools()) {
+    console.error(
+      "research-pilot run requires a web-capable provider (the bare-model arm depends on live web access). Set PRINCIPLES_PROVIDER=claude."
+    );
+    process.exit(2);
+  }
+
   const deps: PilotDeps = {
-    llm: makeClaudeAgentSdkLlm(),
+    llm: resolveDefaultLlm(),
     fetchText: async (url) => {
       const res = await fetch(url);
       return res.text();
