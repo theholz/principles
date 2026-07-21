@@ -455,6 +455,6 @@
     "location": "/home/tait/Documents/trading/docs/governance/templates",
     "status": "partial",
     "receipt": "ls 2026-07-21: 24 templates (Jan 2026) incl. retrospective, change-control-request, rule-change-request, error-pattern, service-metrics, planning, task-list",
-    "note": "Operator-authored kit for a self-improving measurable system; intent-tier input \u2014 retrospective/change-control/rule-change/error-pattern templates map onto capture/review/propose/improve processes."
+    "note": "Operator-authored kit (Jan 2026) for a self-improving measurable system. INPUTS ONLY \u2014 they set the bar the processes must understand; the emitted processes are expected to AIM HIGHER, not conform (operator 2026-07-21). Retrospective/change-control/rule-change/error-pattern map onto capture/review/propose/improve."
   }
 ]
