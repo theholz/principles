@@ -380,7 +380,11 @@ review queues) before elevate (delegation).
 
 ---
 
-## 17. The governance-factory instance (spec candidate, addendum 2026-07-21)
+## 17. The trust-factory (governance-factory instance) (spec candidate, addendum 2026-07-21)
+
+**Name (operator, 2026-07-21): `trust-factory`** — chosen over "governance builder+maintainer"
+deliberately: models and agents relate better to building trust than to being governed
+(doubt-led framing applied to the system's own naming).
 
 Operator direction: a factory deployment with **no stake in any other project**, existing to
 build and maintain the governance plane (agt_full) — the second independence pole beside the
