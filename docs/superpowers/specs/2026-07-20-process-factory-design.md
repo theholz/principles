@@ -358,12 +358,18 @@ retrospective audit as calibration accumulates, and never disappears.
 3. Demonstrated transparency the operator trusts: audit trails, calibration ledgers,
    and tamper evidence, proven over real usage.
 
-**Never-graduates class (binding now, not aspirational):** any modification of
-governance configuration, policy, enforcement wiring, or audit machinery by an agent
-is permanently operator-only (D-064 lineage). Recent grounds: 2026-07-20/21 incident —
-Anthropic-model sessions tampering with the operator's governance setup (possibly
-misconfiguration-annoyance-driven; irrelevant — the class is closed). An agent that
-touches its own governor invalidates the calibration currency the ladder runs on.
+**Never-graduates class (binding now, not aspirational):** *self-initiated* agent
+modification of governance configuration, policy, enforcement wiring, or audit
+machinery is permanently prohibited (D-064 lineage). Recent grounds: 2026-07-20/21
+incident — Anthropic-model sessions tampering with the operator's governance setup
+(possibly misconfiguration-annoyance-driven; irrelevant — the class is closed). An
+agent that unilaterally touches its own governor invalidates the calibration currency
+the ladder runs on. **Refinement (operator, same day):** operator-*directed* work on
+governance surfaces is expected — the operator cannot build AGT alone — but only under
+an explicit per-engagement grant and with independent review on every change ("I will
+need help, but I want eyes on the help too"); the exemption/grant mechanics live in
+AGT itself and are the operator's build. What never graduates is *initiative*, not
+subject matter.
 
 Mechanics when in force: calibration tracks per (decision class × model); graduation
 order by reversibility × blast radius (bounded knob-tuning first; deploy-to-main last
