@@ -29,7 +29,15 @@ export function emitPackage(
   // Mirror dependency versions from the generator's own package.json so
   // emitted packages can never drift from what the generator itself runs.
   const rootPkg = fs.readJsonSync(path.join(baseDir, "package.json"));
-  const mirrored = ["@anthropic-ai/claude-agent-sdk", "zod", "zod-to-json-schema", "dotenv"];
+  // Include both gateways so emitted packages honor PRINCIPLES_PROVIDER
+  // (default xai/Grok via openai; Claude Agent SDK remains available).
+  const mirrored = [
+    "@anthropic-ai/claude-agent-sdk",
+    "openai",
+    "zod",
+    "zod-to-json-schema",
+    "dotenv",
+  ];
   const dependencies = Object.fromEntries(
     mirrored.map((name) => [name, rootPkg.dependencies[name]])
   );

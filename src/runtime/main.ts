@@ -2,7 +2,7 @@ import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
 dotenv.config();
-import { makeClaudeAgentSdkLlm } from "../llm/claudeGateway";
+import { resolveDefaultLlm } from "../llm/resolveLlm";
 import { Ontology } from "../shared/types";
 import { runOntology } from "./orchestrator";
 
@@ -12,13 +12,10 @@ async function main() {
     console.error('Usage: npm run run-agents "<your prompt>"');
     process.exit(1);
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn("ANTHROPIC_API_KEY is not set — relying on local Claude Code credentials if available.");
-  }
 
   const ontologyPath = path.join(__dirname, "..", "ontology.json");
   const ontology: Ontology = JSON.parse(fs.readFileSync(ontologyPath, "utf8"));
-  const llm = makeClaudeAgentSdkLlm();
+  const llm = resolveDefaultLlm();
 
   const result = await runOntology(llm, ontology, prompt);
   if (result.escaped) {

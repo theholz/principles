@@ -1,7 +1,7 @@
 import path from "path";
 import dotenv from "dotenv";
 dotenv.config();
-import { makeClaudeAgentSdkLlm } from "../llm/claudeGateway";
+import { resolveDefaultLlm } from "../llm/resolveLlm";
 import { compileRubric } from "../core/rubricCompiler";
 import { writeRubricArtifacts } from "../core/rubricRender";
 
@@ -11,11 +11,8 @@ const main = async () => {
     console.error('Usage: yarn compile-rubric "<goal to compile a rubric for>"');
     process.exit(1);
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn("ANTHROPIC_API_KEY is not set — relying on local Claude Code credentials if available.");
-  }
 
-  const llm = makeClaudeAgentSdkLlm();
+  const llm = resolveDefaultLlm();
   console.log("Deriving and vetting truths, decomposing, compiling rubric...");
   const rubric = await compileRubric(llm, objective);
 

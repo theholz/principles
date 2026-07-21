@@ -1,7 +1,7 @@
 import path from "path";
 import dotenv from "dotenv";
 dotenv.config();
-import { makeClaudeAgentSdkLlm } from "../llm/claudeGateway";
+import { resolveDefaultLlm } from "../llm/resolveLlm";
 import { generateOntology } from "../core/pipeline";
 import { emitPackage } from "../core/emit";
 
@@ -11,11 +11,10 @@ const main = async () => {
     console.error('Usage: yarn generate-agents "<goal or problem statement>"');
     process.exit(1);
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn("ANTHROPIC_API_KEY is not set — relying on local Claude Code credentials if available.");
-  }
 
-  const llm = makeClaudeAgentSdkLlm();
+  const llm = resolveDefaultLlm();
+  const provider = process.env.PRINCIPLES_PROVIDER ?? "xai";
+  console.log(`Provider: ${provider} (model: ${process.env.PRINCIPLES_MODEL ?? "default"})`);
   console.log("Deriving and vetting truths, decomposing, generating agent specs...");
   const report = await generateOntology(llm, userPrompt);
 

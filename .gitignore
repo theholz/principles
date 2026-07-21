@@ -10,3 +10,8 @@ packages
 rubrics/
 .DS_Store
 .bench-cache/
+
+# runtime artifacts
+receipts/
+review-receipts/
+.claude/tmp/

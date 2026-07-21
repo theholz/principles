@@ -40,7 +40,7 @@ describe("emitPackage", () => {
     expect(pkgJson.dependencies.zod).toBeDefined();
     expect(pkgJson.dependencies["@anthropic-ai/claude-agent-sdk"]).toBeDefined();
     expect(pkgJson.dependencies["zod-to-json-schema"]).toBeDefined();
-    expect(pkgJson.dependencies.openai).toBeUndefined();
+    expect(pkgJson.dependencies.openai).toBeDefined();
     expect(pkgJson.devDependencies.typescript).toBeDefined();
 
     const overview = fs.readFileSync(path.join(pkgDir, "Overview.md"), "utf8");
