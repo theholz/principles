@@ -2,12 +2,15 @@ import { describe, it, expect } from "vitest";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   assess,
+  assignEntryIds,
   scanRoots,
+  triageCitationCritique,
   AssessFs,
   CapabilityInventorySchema,
   TriageVerdictSchema,
   ConstraintAnalysisSchema,
 } from "../../src/factory/assess";
+import { failures } from "../../src/shared/types";
 import { Llm, LlmRequest } from "../../src/llm/gateway";
 
 // ---------------------------------------------------------------------------
@@ -64,14 +67,13 @@ function scriptedLlm(overrides: Partial<Record<string, (req: LlmRequest<unknown>
       case "capability_inventory":
         return { inventory: CLASSIFIED_INVENTORY };
       case "triage_verdict":
-        return { verdict: "create_new", evidence: "dmaic is only partial; trade-journal is a gap — coverage below 50%" };
-      case "rubric_verdicts":
         return {
-          verdicts: [
-            { criterionId: "a-cites", pass: true, evidence: "names dmaic and trade-journal entries" },
-            { criterionId: "a-threshold", pass: true, evidence: "coverage below 50% supports create_new" },
-          ],
+          verdict: "create_new",
+          citedEntryIds: [],
+          evidence: "dmaic is only partial; trade-journal is a gap — coverage below 50%",
         };
+      case "rubric_verdicts":
+        return passAll(req.prompt);
       case "constraint_analysis":
         return {
           flowSteps: ["capture", "review", "act"],
@@ -94,6 +96,28 @@ function scriptedLlm(overrides: Partial<Record<string, (req: LlmRequest<unknown>
 
 const PROBLEM = "keep a disciplined daily trade journal with review gates";
 
+/** Criterion ids of whatever rubric the judge was handed, parsed from the
+ * prompt (tests/factory/compile.test.ts pattern) — serves any rubric shape
+ * without hardcoding it. */
+function rubricIds(prompt: string): string[] {
+  const section = prompt.split("## Rubric")[1] ?? "";
+  return [...section.matchAll(/^- ([\w-]+):/gm)].map((m) => m[1]);
+}
+
+const passAll = (prompt: string) => ({
+  verdicts: rubricIds(prompt).map((id) => ({
+    criterionId: id,
+    pass: true,
+    evidence: `criterion ${id} satisfied by cited candidate content`,
+  })),
+});
+
+/** Deterministic injected entry-id generator: inv-1, inv-2, ... in inventory order. */
+const seqIds = () => {
+  let n = 0;
+  return () => `inv-${++n}`;
+};
+
 // ---------------------------------------------------------------------------
 // (a) Deterministic scan
 // ---------------------------------------------------------------------------
@@ -115,6 +139,54 @@ describe("scanRoots", () => {
       { name: "gate", kind: "hook", location: "/plugins/methodologies/hooks/gate.json", hint: "", source: "fs" },
       { name: "local-helper", kind: "skill", location: "/skills/local-helper", hint: "local helper skill", source: "fs" },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Triage citation gate — pure mechanical helpers
+// ---------------------------------------------------------------------------
+
+describe("triage citation gate (mechanical helpers)", () => {
+  const table = assignEntryIds(
+    [
+      { name: "dmaic", kind: "skill", location: "/plugins/methodologies/skills/dmaic", status: "partial" },
+      { name: "trade-journal", kind: "skill", location: "", status: "gap" },
+    ],
+    [
+      {
+        name: "dmaic",
+        kind: "skill",
+        location: "/plugins/methodologies/skills/dmaic",
+        hint: "Six Sigma DMAIC improvement loop",
+        source: "fs",
+      },
+    ],
+    seqIds()
+  );
+
+  it("assignEntryIds keys entries by injected opaque ids and joins them to scanned ground truth by name", () => {
+    expect(table.map((ie) => ie.id)).toEqual(["inv-1", "inv-2"]);
+    expect(table[0].scanned?.hint).toBe("Six Sigma DMAIC improvement loop");
+    expect(table[1].scanned).toBeUndefined(); // classifier-added gap: nothing scanned to join
+  });
+
+  it("passes a reuse verdict citing a real built/partial id; fails citing nothing, only gaps, or unknown ids", () => {
+    const ok = triageCitationCritique({ verdict: "compose", citedEntryIds: ["inv-1"], evidence: "e" }, table);
+    expect(failures(ok)).toEqual([]);
+
+    for (const citedEntryIds of [[], ["inv-2"], ["inv-99"]]) {
+      const bad = triageCitationCritique({ verdict: "compose", citedEntryIds, evidence: "e" }, table);
+      const failed = failures(bad);
+      expect(failed).toHaveLength(1);
+      expect(failed[0].criterionId).toBe("tv-cites-real-inventory");
+    }
+  });
+
+  it("create_new needs no citations, but a fabricated id still fails mechanically", () => {
+    expect(failures(triageCitationCritique({ verdict: "create_new", citedEntryIds: [], evidence: "e" }, table))).toEqual([]);
+    const forged = triageCitationCritique({ verdict: "create_new", citedEntryIds: ["inv-99"], evidence: "e" }, table);
+    expect(failures(forged)).toHaveLength(1);
+    expect(failures(forged)[0].evidence).toContain("inv-99");
   });
 });
 
@@ -143,11 +215,15 @@ describe("assess", () => {
     expect(calls.every((c) => c.webTools === undefined)).toBe(true);
   });
 
-  it("returns a use_existing verdict intact — assess reports, the caller decides", async () => {
+  it("returns a use_existing verdict intact when it cites a real scanned entry — assess reports, the caller decides", async () => {
     const { llm } = scriptedLlm({
-      triage_verdict: () => ({ verdict: "use_existing", evidence: "dmaic covers >=80% of the need" }),
+      triage_verdict: () => ({
+        verdict: "use_existing",
+        citedEntryIds: ["inv-1"], // dmaic [partial] under the injected deterministic ids
+        evidence: "dmaic covers >=80% of the need",
+      }),
     });
-    const result = await assess(llm, PROBLEM, { roots: ["/plugins"], fs: fixtureFs(defaultFiles) });
+    const result = await assess(llm, PROBLEM, { roots: ["/plugins"], fs: fixtureFs(defaultFiles), entryIdGen: seqIds() });
 
     expect(result.assessment.triageVerdict).toEqual({ verdict: "use_existing", evidence: "dmaic covers >=80% of the need" });
     // No short-circuit inside assess: the constraint analysis still ran.
@@ -203,22 +279,21 @@ describe("assess", () => {
   it("refines the triage once with critique feedback when the judge fails it", async () => {
     let judgeCall = 0;
     const { llm, calls, countBySchema } = scriptedLlm({
-      rubric_verdicts: () => {
+      rubric_verdicts: (req) => {
         judgeCall += 1;
         if (judgeCall === 1) {
           return {
-            verdicts: [
-              { criterionId: "a-cites", pass: false, evidence: "no inventory entry named in the evidence" },
-              { criterionId: "a-threshold", pass: true, evidence: "create_new consistent with empty citation" },
-            ],
+            verdicts: rubricIds(req.prompt).map((id) => ({
+              criterionId: id,
+              pass: id !== "a-cites",
+              evidence:
+                id === "a-cites"
+                  ? "no inventory entry named in the evidence"
+                  : `criterion ${id} satisfied by cited candidate content`,
+            })),
           };
         }
-        return {
-          verdicts: [
-            { criterionId: "a-cites", pass: true, evidence: "names dmaic explicitly" },
-            { criterionId: "a-threshold", pass: true, evidence: "coverage below 50%" },
-          ],
-        };
+        return passAll(req.prompt);
       },
     });
     const result = await assess(llm, PROBLEM, { roots: ["/plugins"], fs: fixtureFs(defaultFiles) });
@@ -233,11 +308,12 @@ describe("assess", () => {
 
   it("surfaces a non-converged triage verdict in notes instead of blessing it", async () => {
     const { llm } = scriptedLlm({
-      rubric_verdicts: () => ({
-        verdicts: [
-          { criterionId: "a-cites", pass: false, evidence: "still cites nothing" },
-          { criterionId: "a-threshold", pass: true, evidence: "threshold fine" },
-        ],
+      rubric_verdicts: (req) => ({
+        verdicts: rubricIds(req.prompt).map((id) => ({
+          criterionId: id,
+          pass: id !== "a-cites",
+          evidence: id === "a-cites" ? "still cites nothing" : `criterion ${id} satisfied by cited candidate content`,
+        })),
       }),
     });
     const result = await assess(llm, PROBLEM, { roots: ["/plugins"], fs: fixtureFs(defaultFiles) });
@@ -273,6 +349,183 @@ describe("assess", () => {
 
     expect(result.notes.some((n) => n.includes("demoted to assumption"))).toBe(true);
     expect(result.assessment.constraint.id).toBe("c1");
+  });
+
+  it("passes the citation gate when a compose verdict cites a scanned partial entry by id — no mechanical critique, judge runs once", async () => {
+    const { llm, calls, countBySchema } = scriptedLlm({
+      triage_verdict: () => ({
+        verdict: "compose",
+        citedEntryIds: ["inv-1"], // dmaic [partial]
+        evidence: "dmaic supplies the review loop; a thin capture layer composes with it to cover the need",
+      }),
+    });
+    const result = await assess(llm, PROBLEM, { roots: ["/plugins"], fs: fixtureFs(defaultFiles), entryIdGen: seqIds() });
+
+    expect(result.assessment.triageVerdict.verdict).toBe("compose");
+    expect(countBySchema("triage_verdict")).toBe(1); // gate passed first try
+    expect(result.notes).toEqual([]);
+    // The triage prompt carried the id-keyed inventory table the citation came from.
+    const triageReq = calls.find((c) => c.schemaName === "triage_verdict")!;
+    expect(triageReq.prompt).toContain("inv-1: dmaic [skill, partial]");
+    // Code-joined judging: the judge saw the ground-truth scanned record for inv-1.
+    const judgeReq = calls.find((c) => c.schemaName === "rubric_verdicts")!;
+    expect(judgeReq.prompt).toContain("Six Sigma DMAIC improvement loop");
+  });
+
+  it("feeds a mechanical tv-cites-real-inventory critique back when a compose verdict cites nothing — no judge call wasted on it", async () => {
+    let triageCall = 0;
+    const { llm, calls, countBySchema } = scriptedLlm({
+      triage_verdict: () => {
+        triageCall += 1;
+        return triageCall === 1
+          ? {
+              // Circular: restates the problem's own clauses, cites nothing scanned.
+              verdict: "compose",
+              citedEntryIds: [],
+              evidence: "a disciplined journal, review gates, and daily cadence combined cover the need",
+            }
+          : {
+              verdict: "create_new",
+              citedEntryIds: [],
+              evidence: "dmaic is only partial; trade-journal is a gap — coverage below 50%",
+            };
+      },
+    });
+    const result = await assess(llm, PROBLEM, { roots: ["/plugins"], fs: fixtureFs(defaultFiles), entryIdGen: seqIds() });
+
+    expect(countBySchema("triage_verdict")).toBe(2);
+    const second = calls.filter((c) => c.schemaName === "triage_verdict")[1];
+    // Invariant 5: the mechanical critique is fed back into the revision prompt,
+    // naming what was cited vs what exists.
+    expect(second.prompt).toContain("tv-cites-real-inventory");
+    expect(second.prompt).toContain("cited: (none)");
+    expect(second.prompt).toContain("built/partial entries available: inv-1 (dmaic [partial])");
+    expect(second.prompt).toContain("Previous verdict");
+    // The judge ran only for the revised (gate-passing) candidate.
+    expect(countBySchema("rubric_verdicts")).toBe(1);
+    expect(result.assessment.triageVerdict.verdict).toBe("create_new");
+    expect(result.notes).toEqual([]);
+  });
+
+  it("rejects unknown/fabricated cited ids mechanically — an id not in the table can never ground a reuse verdict", async () => {
+    let triageCall = 0;
+    const { llm, calls } = scriptedLlm({
+      triage_verdict: () => {
+        triageCall += 1;
+        return triageCall === 1
+          ? {
+              // A fabricated id: shaped like a handle but never issued this run.
+              verdict: "use_existing",
+              citedEntryIds: ["inv-forged"],
+              evidence: "the cited capability covers >=80% of the need",
+            }
+          : {
+              verdict: "create_new",
+              citedEntryIds: [],
+              evidence: "dmaic is only partial; trade-journal is a gap — coverage below 50%",
+            };
+      },
+    });
+    const result = await assess(llm, PROBLEM, { roots: ["/plugins"], fs: fixtureFs(defaultFiles), entryIdGen: seqIds() });
+
+    const second = calls.filter((c) => c.schemaName === "triage_verdict")[1];
+    expect(second.prompt).toContain("cited ids that do not exist in the inventory table: inv-forged");
+    expect(result.assessment.triageVerdict.verdict).toBe("create_new");
+    expect(result.notes).toEqual([]);
+  });
+
+  it("downgrades a persistently uncited compose verdict to create_new — noted with the original preserved, zero judge calls, stage completes", async () => {
+    const CIRCULAR = {
+      verdict: "compose",
+      citedEntryIds: [],
+      evidence: "journal discipline plus review gating combined cover the need",
+    };
+    const { llm, countBySchema } = scriptedLlm({ triage_verdict: () => CIRCULAR });
+    const result = await assess(llm, PROBLEM, { roots: ["/plugins"], fs: fixtureFs(defaultFiles), entryIdGen: seqIds() });
+
+    // Two elicitations (maxIterations 2), zero judge calls: the mechanical
+    // gate failed both candidates before any judge could be argued past.
+    expect(countBySchema("triage_verdict")).toBe(2);
+    expect(countBySchema("rubric_verdicts")).toBe(0);
+
+    expect(result.assessment.triageVerdict.verdict).toBe("create_new");
+    expect(result.assessment.triageVerdict.evidence).toContain("downgraded by the triage citation gate");
+    expect(result.assessment.triageVerdict.evidence).toContain(CIRCULAR.evidence);
+    const note = result.notes.find((n) =>
+      n.startsWith("triage claimed reuse but cited no scanned built/partial inventory")
+    );
+    expect(note).toBeDefined();
+    expect(note).toContain("downgraded to create_new");
+    expect(note).toContain("compose"); // original verdict preserved
+    expect(note).toContain(CIRCULAR.evidence); // original evidence preserved
+    // The stage did not stop at triage: constraint analysis still ran.
+    expect(result.assessment.constraint.id).toBe("c1");
+    expect(countBySchema("constraint_analysis")).toBeGreaterThan(0);
+  });
+
+  it("lazy-agent: a real-but-irrelevant citation passes the mechanical gate but fails code-joined tv-coverage — downgraded to create_new", async () => {
+    let triageCall = 0;
+    const { llm, calls, countBySchema } = scriptedLlm({
+      triage_verdict: () => {
+        triageCall += 1;
+        return triageCall === 1
+          ? {
+              // Circular: restates the problem's own clauses, cites nothing.
+              verdict: "compose",
+              evidence: "journal capture, review gating, and daily cadence combined cover the need",
+              citedEntryIds: [],
+            }
+          : {
+              // The lazy move after the mechanical critique: sprinkle a REAL
+              // entry (name in prose, id in citations) into the same bogus
+              // coverage claim. dmaic exists and is partial — but it is a Six
+              // Sigma improvement loop, not a journal-capture capability.
+              verdict: "compose",
+              evidence: "dmaic covers journal capture, review gating, and daily cadence end to end",
+              citedEntryIds: ["inv-1"],
+            };
+      },
+      rubric_verdicts: (req) => ({
+        verdicts: rubricIds(req.prompt).map((id) => ({
+          criterionId: id,
+          pass: id !== "tv-coverage",
+          evidence:
+            id === "tv-coverage"
+              ? "dmaic as scanned is a Six Sigma improvement loop skill — it does not cover journal capture or daily cadence as claimed"
+              : `criterion ${id} satisfied by cited candidate content`,
+        })),
+      }),
+    });
+    const result = await assess(llm, PROBLEM, {
+      roots: ["/plugins"],
+      fs: fixtureFs(defaultFiles),
+      entryIdGen: seqIds(),
+    });
+
+    // Iteration 1 fails the mechanical gate (no judge call wasted); iteration 2
+    // passes it (real cited id) so the judge runs — and fails tv-coverage.
+    expect(countBySchema("triage_verdict")).toBe(2);
+    expect(countBySchema("rubric_verdicts")).toBe(1);
+
+    // Code-joined judging: the judge saw the GROUND-TRUTH scanned record for
+    // the cited id — location and SKILL.md description from the scan, never
+    // the verdict's paraphrase.
+    const judgeReq = calls.find((c) => c.schemaName === "rubric_verdicts")!;
+    expect(judgeReq.prompt).toContain("Six Sigma DMAIC improvement loop");
+    expect(judgeReq.prompt).toContain("/plugins/methodologies/skills/dmaic");
+
+    // The unverified reuse claim is DOWNGRADED, never blessed into build_nothing.
+    expect(result.assessment.triageVerdict.verdict).toBe("create_new");
+    const note = result.notes.find((n) =>
+      n.startsWith("triage claimed reuse but cited no scanned built/partial inventory")
+    );
+    expect(note).toBeDefined();
+    expect(note).toContain("downgraded to create_new");
+    expect(note).toContain("compose"); // original verdict preserved
+    expect(note).toContain("dmaic covers journal capture"); // original evidence preserved
+    // The stage did not stop at triage: constraint analysis still ran.
+    expect(result.assessment.constraint.id).toBe("c1");
+    expect(countBySchema("constraint_analysis")).toBeGreaterThan(0);
   });
 
   it("bounds a hostile SKILL.md description hint: truncated, quote-normalized, delimited, flagged untrusted", async () => {

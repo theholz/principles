@@ -43,6 +43,10 @@ export interface CompileOptions {
   webSurvey: boolean;
   fs?: AssessFs;
   engram?: EngramClient;
+  /** Injected opaque entry-id source for the triage citation gate (see
+   * AssessOptions.entryIdGen; default crypto-derived, tests inject
+   * deterministic ids). */
+  entryIdGen?: () => string;
   scalingTier?: ScalingTier;
   domain?: string;
   /** Where to write the spec JSON on the spec_ready path. Never written on
@@ -119,7 +123,12 @@ export async function compileProcess(llm: Llm, problem: string, opts: CompileOpt
   const escalations: string[] = [];
 
   // [1] ASSESS — deterministic scan + judged triage + skeptic-vetted constraint.
-  const assessResult = await assess(llm, problem, { roots: opts.roots, fs: opts.fs, engram: opts.engram });
+  const assessResult = await assess(llm, problem, {
+    roots: opts.roots,
+    fs: opts.fs,
+    engram: opts.engram,
+    entryIdGen: opts.entryIdGen,
+  });
   const { triageVerdict, inventory, constraint } = assessResult.assessment;
   report.push(`Triage: ${triageVerdict.verdict} — ${triageVerdict.evidence}`);
   for (const note of assessResult.notes) report.push(`Assess note: ${note}`);
@@ -131,6 +140,7 @@ export async function compileProcess(llm: Llm, problem: string, opts: CompileOpt
   // channels cannot drift apart silently.
   const ASSESS_ESCALATION_PREFIXES = [
     "triage verdict did not converge",
+    "triage claimed reuse but cited no scanned built/partial inventory",
     "constraint claim did not survive skepticism",
   ];
   for (const note of assessResult.notes) {
@@ -140,6 +150,10 @@ export async function compileProcess(llm: Llm, problem: string, opts: CompileOpt
   }
 
   // "Build nothing" is a valid, cheap outcome (design §4 [1], §9) — exit clean.
+  // A reuse verdict can only reach here through assess()'s triage citation
+  // gate (mechanical tv-cites-real-inventory + code-joined tv-coverage):
+  // unverified reuse claims are downgraded to create_new inside assess, so
+  // the false build_nothing short-circuit from the first live run cannot recur.
   if (triageVerdict.verdict === "use_existing" || triageVerdict.verdict === "compose") {
     const matched = inventory.filter((e) => e.status !== "gap");
     report.push(

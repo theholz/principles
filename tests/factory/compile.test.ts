@@ -115,7 +115,11 @@ function fullPipelineLlm(overrides: Partial<Record<string, (req: LlmRequest<unkn
       case "capability_inventory":
         return { inventory: INVENTORY };
       case "triage_verdict":
-        return { verdict: "create_new", evidence: "dmaic is only partial; journal-gate is a gap — coverage below 50%" };
+        return {
+          verdict: "create_new",
+          citedEntryIds: [],
+          evidence: "dmaic is only partial; journal-gate is a gap — coverage below 50%",
+        };
       case "constraint_analysis":
         return CONSTRAINT_RESPONSE;
       case "truth_attack": // constraint vetting AND truth vetting
@@ -159,7 +163,13 @@ function fullPipelineLlm(overrides: Partial<Record<string, (req: LlmRequest<unkn
   return { llm, calls, countBySchema, schemaNames };
 }
 
-const baseOpts = () => ({ roots: ["/plugins"], webSurvey: true, fs: fixtureFs(FILES) });
+/** Deterministic injected entry-id generator: inv-1, inv-2, ... in inventory order. */
+const seqIds = () => {
+  let n = 0;
+  return () => `inv-${++n}`;
+};
+
+const baseOpts = () => ({ roots: ["/plugins"], webSurvey: true, fs: fixtureFs(FILES), entryIdGen: seqIds() });
 
 // ---------------------------------------------------------------------------
 // compileProcess
@@ -210,9 +220,13 @@ describe("compileProcess", () => {
     expect(calls.filter((c) => c.webTools === true).map((c) => c.schemaName)).toEqual(["landscape_survey"]);
   });
 
-  it("build_nothing short-circuit on use_existing: zero downstream schema calls after triage", async () => {
+  it("build_nothing short-circuit on use_existing with a real citation: zero downstream schema calls after triage", async () => {
     const { llm, schemaNames } = fullPipelineLlm({
-      triage_verdict: () => ({ verdict: "use_existing", evidence: "dmaic covers >=80% of the need" }),
+      triage_verdict: () => ({
+        verdict: "use_existing",
+        citedEntryIds: ["inv-1"], // dmaic [partial] under the injected deterministic ids
+        evidence: "dmaic covers >=80% of the need",
+      }),
     });
     const written: string[] = [];
     const result = await compileProcess(llm, PROBLEM, {
@@ -246,13 +260,46 @@ describe("compileProcess", () => {
     expect(report).toContain("dmaic [skill, partial]");
   });
 
-  it("build_nothing also fires on compose", async () => {
+  it("build_nothing also fires on compose when the verdict cites real inventory", async () => {
     const { llm, countBySchema } = fullPipelineLlm({
-      triage_verdict: () => ({ verdict: "compose", evidence: "dmaic plus journal-gate combined cover the need" }),
+      triage_verdict: () => ({
+        verdict: "compose",
+        citedEntryIds: ["inv-1"],
+        evidence: "dmaic plus journal-gate combined cover the need",
+      }),
     });
     const result = await compileProcess(llm, PROBLEM, baseOpts());
     expect(result.status).toBe("build_nothing");
     expect(countBySchema("typed_truths")).toBe(0);
+  });
+
+  it("does NOT short-circuit on a compose verdict citing nothing scanned: downgraded to create_new, escalated, pipeline continues", async () => {
+    const { llm, countBySchema } = fullPipelineLlm({
+      // Circular reuse claim, iteration after iteration: restates the
+      // problem's own clauses and cites no inventory id — the live-run
+      // failure shape that once produced a false build_nothing.
+      triage_verdict: () => ({
+        verdict: "compose",
+        citedEntryIds: [],
+        evidence: "a disciplined journal with review gates combined covers the need",
+      }),
+    });
+    const result = await compileProcess(llm, PROBLEM, { ...baseOpts(), webSurvey: false });
+
+    // Not build_nothing: the mechanical gate downgraded the unverified reuse claim.
+    expect(result.status).toBe("spec_ready");
+    expect(result.assessResult.assessment.triageVerdict.verdict).toBe("create_new");
+    // Downstream stages actually ran — the false short-circuit is gone.
+    expect(countBySchema("typed_truths")).toBeGreaterThan(0);
+    expect(countBySchema("artifact_plan")).toBeGreaterThan(0);
+    expect(result.spec).toBeDefined();
+    // The downgrade is LOUD: escalations[] and the report both carry it (invariant 5).
+    expect(
+      result.escalations.some((e) =>
+        e.startsWith("assess triage claimed reuse but cited no scanned built/partial inventory")
+      )
+    ).toBe(true);
+    expect(result.report.some((l) => l.startsWith("Assess note:") && l.includes("downgraded to create_new"))).toBe(true);
   });
 
   it("prefixes the enriched objective — the marker, constraint, and inventory hits reach the typed_truths prompt", async () => {
