@@ -272,3 +272,34 @@ should land (with its own review) before factory stages build on it.
    is used in real sessions.
 3. First improvement proposal generated from real outcome data lands in the needs-review
    queue with evidence an operator can judge in under five minutes.
+
+---
+
+## 14. Measurement doctrine (operator addendum, 2026-07-21)
+
+Stated plainly by the operator after the first live self-compilation: **agents perform
+according to how they are measured.** Judge-passing is a proxy measurement; gates that
+verify proxies are symptom patches for problems that resolve when the right measurements
+exist. Guards exist because models amplify operator mistakes — and uncaught mistakes at
+speed compound — not because models are malicious.
+
+Binding consequences:
+
+1. **Forecast ledger.** Every judged compile-time verdict (triage, constraint analysis,
+   contract baselines, artifact plan) is recorded in the spec's lineage as a falsifiable
+   forecast, resolved by the scan stage against downstream outcomes (D-019 pattern applied
+   to the factory itself). Stage-level measurement is *calibration against resolution*,
+   never judge pass-rate.
+2. **Gates are scaffolding with retirement conditions.** Every mechanical or judged gate
+   added in response to a failure MUST name the outcome measurement that would make it
+   unnecessary and carry a retirement condition tied to that measurement (WL-37 graduation
+   canon; operator owns "met"). A gate without a retirement condition is a design smell.
+   First instance: `tv-cites-real-inventory` retires when triage calibration meets an
+   operator-set threshold over N resolved verdicts.
+3. **T/I/OE for the factory.** Throughput = emitted processes in active use passing their
+   decision rules. Deployed-but-unused packs are inventory; unreviewed proposals are WIP;
+   tokens + operator review time are operating expense. Target T only; all gate/judge
+   metrics are derivative — monitor, never target.
+4. **Anchors over guard accumulation.** The seed-diff caught the first live error because
+   it was an anchored measurement with a short feedback loop. Prefer adding anchors and
+   shortening resolution loops to adding gates.
