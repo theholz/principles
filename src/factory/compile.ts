@@ -4,7 +4,7 @@ import { failures } from "../shared/types";
 import { RefineOutcome } from "../shared/refine";
 import { deriveFoundations } from "../core/foundations";
 import { generateAgentSpecs } from "../core/specs";
-import { assess, AssessFs, AssessResult, EngramClient } from "./assess";
+import { assess, AssessFs, AssessResult, BaselineEntry, EngramClient } from "./assess";
 import { deriveContract } from "./contract";
 import { assembleAndValidateSpec, planArtifacts, SpecAssemblyInputs } from "./spec";
 import { InventoryEntry, InventoryStatus, ProcessSpec, ScalingTier } from "./types";
@@ -47,6 +47,9 @@ export interface CompileOptions {
    * AssessOptions.entryIdGen; default crypto-derived, tests inject
    * deterministic ids). */
   entryIdGen?: () => string;
+  /** Operator-verified baseline inventory, forwarded verbatim to assess
+   * (see AssessOptions.baseline — the Baseline Accord as INPUT, design §15). */
+  baseline?: BaselineEntry[];
   scalingTier?: ScalingTier;
   domain?: string;
   /** Where to write the spec JSON on the spec_ready path. Never written on
@@ -153,6 +156,7 @@ export async function compileProcess(llm: Llm, problem: string, opts: CompileOpt
     fs: opts.fs,
     engram: opts.engram,
     entryIdGen: opts.entryIdGen,
+    baseline: opts.baseline,
   });
   const { triageVerdict, inventory, constraint } = assessResult.assessment;
   report.push(`Triage: ${triageVerdict.verdict} — ${triageVerdict.evidence}`);

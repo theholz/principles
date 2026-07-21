@@ -564,6 +564,71 @@ describe("factory compile", () => {
     expect(fake.files.has("process-spec.json")).toBe(true);
   });
 
+  it("--baseline: loads the operator baseline, feeds it to assess, and the deterministic row lands in the spec inventory", async () => {
+    const baselineJson = JSON.stringify([
+      {
+        name: "engram-memory-api",
+        kind: "service",
+        location: "engram/api/memory",
+        status: "built",
+        receipt: "engram/api/memory/routes.py:42",
+      },
+    ]);
+    const { llm, calls } = compilePipelineLlm();
+    const { deps, out, fake } = makeDeps({ "baseline.json": baselineJson }, { llm });
+
+    const code = await run(["compile", PROBLEM, "--baseline", "baseline.json"], deps);
+
+    expect(code).toBe(0);
+    // The baseline entered classification as an operator-baseline candidate
+    // carrying its receipt as the hint.
+    const classify = calls.find((c) => c.schemaName === "capability_inventory")!;
+    expect(classify.prompt).toContain("source: operator-baseline");
+    expect(classify.prompt).toContain("engram/api/memory/routes.py:42");
+    // The operator-verified row survived to the written spec with its status
+    // intact (constructed in code, not by the model).
+    const spec = loadProcessSpec(fake.files.get("process-spec.json")!);
+    expect(spec.assessment.inventory).toContainEqual({
+      name: "engram-memory-api",
+      kind: "service",
+      location: "engram/api/memory",
+      status: "built",
+    });
+    // The supplied-count note is surfaced in the compile report.
+    expect(out.join("\n")).toContain("operator baseline supplied: 1 entry");
+  });
+
+  it("--baseline with a missing file is an operational error (exit 1) before any model call", async () => {
+    const { llm, calls } = compilePipelineLlm();
+    const { deps, err } = makeDeps({}, { llm });
+
+    expect(await run(["compile", PROBLEM, "--baseline", "nope.json"], deps)).toBe(1);
+    expect(err.join("\n")).toContain("No baseline inventory found at nope.json");
+    expect(calls).toEqual([]); // rejected before the pipeline spent a single model call
+  });
+
+  it("--baseline with an invalid file (built entry lacking a receipt) is an operational error (exit 1) naming the offending path", async () => {
+    const bad = JSON.stringify([{ name: "a", kind: "service", location: "x", status: "built" }]);
+    const { llm, calls } = compilePipelineLlm();
+    const { deps, err } = makeDeps({ "baseline.json": bad }, { llm });
+
+    expect(await run(["compile", PROBLEM, "--baseline", "baseline.json"], deps)).toBe(1);
+    const stderr = err.join("\n");
+    expect(stderr).toContain("Failed to load baseline inventory baseline.json");
+    expect(stderr).toContain("0.receipt");
+    expect(stderr).toContain("unverified reuse claim");
+    expect(calls).toEqual([]);
+  });
+
+  it("--baseline without a file argument is a usage error (exit 2)", async () => {
+    const { llm, calls } = compilePipelineLlm();
+    const { deps, err } = makeDeps({}, { llm });
+
+    expect(await run(["compile", PROBLEM, "--baseline"], deps)).toBe(2);
+    expect(err.join("\n")).toContain("--baseline requires a file argument");
+    expect(calls).toEqual([]);
+  });
+
   it("compile without a problem argument is a usage error (exit 2)", async () => {
     const { llm, calls } = compilePipelineLlm();
     const { deps, err } = makeDeps({}, { llm });

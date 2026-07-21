@@ -303,3 +303,107 @@ Binding consequences:
 4. **Anchors over guard accumulation.** The seed-diff caught the first live error because
    it was an anchored measurement with a short feedback loop. Prefer adding anchors and
    shortening resolution loops to adding gates.
+
+---
+
+## 15. Baseline accord + adoptions from the 2026-04 goals conversation (addendum, 2026-07-21)
+
+Provenance: operator's Apr 10–11 conversation with Sonnet (Engram Temporal/forge/goals work;
+transcript reviewed 2026-07-21). Operator's stated lesson after Engram's goals system broke on
+poisoned memory: **determine early in the pipeline whether all parties agree on the baseline
+facts before engaging in any meaningful work; if not, establish that baseline first.**
+
+1. **Baseline Accord (new stage-1 exit gate — priority build).** Assess ends by emitting a
+   *Baseline Accord*: the run's current-state claims as typed, falsifiable statements, each
+   tagged with provenance (`scanned` — fs/registry evidence attached; `measured` — probe or
+   metric value attached; `claimed` — unverified, listed loudly). The pipeline HALTS for
+   accord before decomposition: operator ack, or mechanical verification against anchors
+   (registry, seed, probes) where they exist. Disagreement is not an error — it is the
+   signal to establish the baseline before spending any downstream judgment. (Round 3's
+   "factory is a full gap" false premise is the motivating instance; Sonnet's recurring
+   "Verified Gaps (disk state, not memory)" tables are the manual form.)
+2. **`implementation_status` on artifacts/subtasks**: `new` vs `exists` (harden, with
+   locations) — different briefs for different cognitive tasks; prevents rebuilding or
+   breaking what exists.
+3. **Mission-brief role contract**: current state / target state / scope boundary /
+   binary done-when — replaces story-shaped role instructions at emit time.
+4. **Anchor traceability, flag-not-reject**: every subtask names which anchor/outcome
+   metric it moves, or declares its enabling chain; unanswerable = flagged for the
+   operator, never silently passed or hard-rejected (Goodhart guard inside the contract).
+5. **Doubt-led framing** for generated executors and judges: pose the problem the process
+   exists to solve ("if this broke silently tomorrow, would the system tell you?") rather
+   than the checklist — structurally harder to game than compliance framing.
+6. **Constraint-first sequencing; close the loop once** before elaboration — TOC over the
+   decomposition; the first end-to-end pass outranks component completeness.
+7. **Metric evolution lives inside the improvement loop**: when scan detects the
+   constraint has shifted, it proposes new anchor metrics — "that's not instability,
+   that's the system working correctly."
+
+---
+
+## 16. Earned-autonomy ladder (ASPIRATIONAL — operator-gated, addendum 2026-07-21)
+
+Definition adopted: an action is **operator-anchored** when it traces to an operator-set
+anchor (goal, threshold, or standing grant), any grant was earned against recorded
+calibration for that decision class, remains scoped and revocable, and leaves an audit
+trail the operator actually reviews. HITL is the *floor state* of a decision class, not
+the definition of anchoring; the anchor migrates approval → standing policy →
+retrospective audit as calibration accumulates, and never disappears.
+
+**Status: NOT in force.** The operator conditionally agrees, gated on ALL of:
+1. `agt_full` fully built and integrated with every surface, model, and agent per its
+   definitions — no governance-free lanes.
+2. A detailed, operator-approved migration plan before any decision class graduates
+   past HITL. No wholesale grants.
+3. Demonstrated transparency the operator trusts: audit trails, calibration ledgers,
+   and tamper evidence, proven over real usage.
+
+**Never-graduates class (binding now, not aspirational):** *self-initiated* agent
+modification of governance configuration, policy, enforcement wiring, or audit
+machinery is permanently prohibited (D-064 lineage). Recent grounds: 2026-07-20/21
+incident — Anthropic-model sessions tampering with the operator's governance setup
+(possibly misconfiguration-annoyance-driven; irrelevant — the class is closed). An
+agent that unilaterally touches its own governor invalidates the calibration currency
+the ladder runs on. **Refinement (operator, same day):** operator-*directed* work on
+governance surfaces is expected — the operator cannot build AGT alone — but only under
+an explicit per-engagement grant and with independent review on every change ("I will
+need help, but I want eyes on the help too"); the exemption/grant mechanics live in
+AGT itself and are the operator's build. What never graduates is *initiative*, not
+subject matter.
+
+Mechanics when in force: calibration tracks per (decision class × model); graduation
+order by reversibility × blast radius (bounded knob-tuning first; deploy-to-main last
+or never); demotion on miss; trust decays with model changes; operator owns every
+threshold and every "met" (WL-37 canon). Constraint discipline applies to the operator
+as constraint: exploit (cheap evidence-attached reviews) and subordinate (WIP-capped
+review queues) before elevate (delegation).
+
+---
+
+## 17. The governance-factory instance (spec candidate, addendum 2026-07-21)
+
+Operator direction: a factory deployment with **no stake in any other project**, existing to
+build and maintain the governance plane (agt_full) — the second independence pole beside the
+advisor (which watches everything it is not part of; this builds the watcher it is not
+subject to). Resolves the circularity of a governed factory maintaining its own governor.
+
+Design commitments:
+1. **Instance, not fork.** Same engine (this repo); independence lives in deployment
+   config: separate checkout/profile, own hand-authored seed spec ("maintain the
+   governance plane"), own registry and forecast ledger, roots pointed at agt_full.
+   No second codebase; no drift tax.
+2. **Independence is not autonomy — shortest rope in the fleet.** Supervision is entirely
+   review-time, because the surface is small, rarely-run, and maximally watched: every
+   run operator-invoked (§16 initiative rule at full strength), every output a draft PR,
+   cross-family review mandatory, no standing schedules, no self-directed scans of
+   governance surfaces.
+3. **Per-domain trust résumé.** Its calibration ledger is the only admissible evidence
+   for ever graduating any governance-adjacent decision class — collected from day one,
+   judged by the operator.
+4. **Disaster recovery property:** no stake in platform memory/config means platform
+   corruption (the brain-hub goals/memory-poisoning class) cannot reach the governance
+   maintainer.
+5. *Quis custodiet* lands on the operator + opposite-family review, by design.
+
+Eventually D-entry-shaped for the Engram/AGT decision log: it defines who may build the
+thing that governs everyone.
