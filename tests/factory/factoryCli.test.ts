@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "fs-extra";
 import path from "path";
 import { run, FactoryDeps } from "../../src/scripts/factoryCli";
@@ -59,7 +59,12 @@ function makeFakeEmitFs() {
  */
 const makeDeps = (
   specFiles: Record<string, string> = {},
-  opts: { engramPluginsRoot?: string; llm?: Llm; webSurvey?: boolean } = {}
+  opts: {
+    engramPluginsRoot?: string;
+    llm?: Llm;
+    webSurvey?: boolean;
+    fetchJson?: FactoryDeps["fetchJson"];
+  } = {}
 ) => {
   const out: string[] = [];
   const err: string[] = [];
@@ -95,6 +100,7 @@ const makeDeps = (
     engramPluginsRoot: opts.engramPluginsRoot,
     llm: opts.llm,
     webSurvey: opts.webSurvey,
+    fetchJson: opts.fetchJson,
     log: (s) => out.push(s),
     error: (s) => err.push(s),
   };
@@ -724,6 +730,183 @@ describe("factory scan", () => {
     const { deps, err } = makeDeps({ "seed.json": seedJson, "outcomes.json": "[]" });
     expect(await run(["scan", "--spec", "seed.json", "--outcomes", "outcomes.json"], deps)).toBe(1);
     expect(err.join("\n")).toContain("requires an LLM");
+  });
+});
+
+describe("factory models", () => {
+  // The models verb resolves its config from process.env (resolveProviderConfig
+  // + the PRINCIPLES_MODEL selection marker) — clear every provider variable
+  // before each test and restore the developer's real values afterwards.
+  const ENV_KEYS = [
+    "PRINCIPLES_PROVIDER",
+    "PRINCIPLES_MODEL",
+    "PRINCIPLES_BASE_URL",
+    "PRINCIPLES_API_KEY",
+    "XAI_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+  ] as const;
+  let savedEnv: Record<string, string | undefined>;
+
+  beforeEach(() => {
+    savedEnv = {};
+    for (const k of ENV_KEYS) {
+      savedEnv[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+
+  afterEach(() => {
+    for (const k of ENV_KEYS) {
+      if (savedEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    }
+  });
+
+  /** Injected fetchJson recording every call; resolves with the given body. */
+  function recordingFetch(body: unknown) {
+    const calls: { url: string; headers: Record<string, string> }[] = [];
+    const fetchJson = async (url: string, headers: Record<string, string>) => {
+      calls.push({ url, headers });
+      return body;
+    };
+    return { fetchJson, calls };
+  }
+
+  const LISTING = {
+    data: [
+      { id: "openai/gpt-4.1", owned_by: "openai" },
+      { id: "grok-4.5" },
+      { id: "grok-3" },
+      { id: "claude-sonnet-5", owned_by: "anthropic" },
+    ],
+  };
+
+  it("happy path: groups ids by family, marks the selected PRINCIPLES_MODEL, sends the bearer key", async () => {
+    process.env.XAI_API_KEY = "xai-test-key";
+    process.env.PRINCIPLES_MODEL = "grok-4.5";
+    const { fetchJson, calls } = recordingFetch(LISTING);
+    const { deps, out, err } = makeDeps({}, { fetchJson });
+
+    const code = await run(["models"], deps);
+
+    expect(code).toBe(0);
+    expect(err).toEqual([]);
+    expect(calls).toEqual([
+      { url: "https://api.x.ai/v1/models", headers: { Authorization: "Bearer xai-test-key" } },
+    ]);
+    const stdout = out.join("\n");
+    // Provider + base URL header line, then families sorted with their ids.
+    expect(stdout).toContain("Provider: xai");
+    expect(stdout).toContain("https://api.x.ai/v1");
+    expect(out).toContain("claude:");
+    expect(out).toContain("  claude-sonnet-5");
+    expect(out).toContain("grok:");
+    expect(out).toContain("  grok-3");
+    expect(out).toContain("  grok-4.5 * (selected)");
+    expect(out).toContain("openai:");
+    expect(out).toContain("  openai/gpt-4.1"); // "/" namespace beats "-" splitting
+    expect(out.indexOf("claude:")).toBeLessThan(out.indexOf("grok:")); // sorted families
+    expect(out.indexOf("grok:")).toBeLessThan(out.indexOf("openai:"));
+    expect(stdout).not.toContain("not visible to this key"); // selected IS listed
+  });
+
+  it("honors PRINCIPLES_BASE_URL for the listing endpoint (LiteLLM proxy case)", async () => {
+    process.env.XAI_API_KEY = "k";
+    process.env.PRINCIPLES_BASE_URL = "http://localhost:4000/v1";
+    const { fetchJson, calls } = recordingFetch({ data: [] });
+    const { deps } = makeDeps({}, { fetchJson });
+
+    expect(await run(["models"], deps)).toBe(0);
+    expect(calls[0].url).toBe("http://localhost:4000/v1/models");
+  });
+
+  it("a selected model absent from the listing gets the not-visible trailing note", async () => {
+    process.env.XAI_API_KEY = "k";
+    process.env.PRINCIPLES_MODEL = "grok-99-imaginary";
+    const { fetchJson } = recordingFetch(LISTING);
+    const { deps, out } = makeDeps({}, { fetchJson });
+
+    const code = await run(["models"], deps);
+
+    expect(code).toBe(0);
+    const stdout = out.join("\n");
+    expect(stdout).toContain("grok-99-imaginary");
+    expect(stdout).toContain("selected model not visible to this key");
+    expect(stdout).not.toContain("* (selected)"); // nothing in the list to mark
+  });
+
+  it("no PRINCIPLES_MODEL set: nothing is marked selected and no note is printed", async () => {
+    process.env.XAI_API_KEY = "k";
+    const { fetchJson } = recordingFetch(LISTING);
+    const { deps, out } = makeDeps({}, { fetchJson });
+
+    expect(await run(["models"], deps)).toBe(0);
+    const stdout = out.join("\n");
+    expect(stdout).not.toContain("* (selected)");
+    expect(stdout).not.toContain("not visible to this key");
+  });
+
+  it("missing API key exits 1 with a readable error and never fetches", async () => {
+    const { fetchJson, calls } = recordingFetch(LISTING);
+    const { deps, err } = makeDeps({}, { fetchJson });
+
+    const code = await run(["models"], deps);
+
+    expect(code).toBe(1);
+    expect(calls).toEqual([]);
+    const stderr = err.join("\n");
+    expect(stderr).toContain("No API key configured");
+    expect(stderr).toContain("XAI_API_KEY");
+  });
+
+  it("a failing fetch exits 1 surfacing the error (status) plus the LiteLLM hint", async () => {
+    process.env.XAI_API_KEY = "k";
+    const fetchJson = async () => {
+      throw new Error("HTTP 502 Bad Gateway");
+    };
+    const { deps, err } = makeDeps({}, { fetchJson });
+
+    const code = await run(["models"], deps);
+
+    expect(code).toBe(1);
+    const stderr = err.join("\n");
+    expect(stderr).toContain("HTTP 502 Bad Gateway");
+    expect(stderr).toContain("https://api.x.ai/v1/models");
+    expect(stderr).toContain("LiteLLM");
+  });
+
+  it("a non-OpenAI response shape exits 1 naming the expected shape", async () => {
+    process.env.XAI_API_KEY = "k";
+    const { fetchJson } = recordingFetch({ models: ["grok-4.5"] }); // wrong key
+    const { deps, err } = makeDeps({}, { fetchJson });
+
+    expect(await run(["models"], deps)).toBe(1);
+    expect(err.join("\n")).toContain("{ data: [{ id }] }");
+  });
+
+  it("claude provider is informational: exit 0, Agent SDK note, ZERO fetches", async () => {
+    process.env.PRINCIPLES_PROVIDER = "claude";
+    const { fetchJson, calls } = recordingFetch(LISTING);
+    const { deps, out } = makeDeps({}, { fetchJson });
+
+    const code = await run(["models"], deps);
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([]); // no listing endpoint to hit
+    const stdout = out.join("\n");
+    expect(stdout).toContain("Provider: claude");
+    expect(stdout).toContain("Agent SDK resolves models internally");
+  });
+
+  it("models with an unexpected argument is a usage error (exit 2), no fetch", async () => {
+    process.env.XAI_API_KEY = "k";
+    const { fetchJson, calls } = recordingFetch(LISTING);
+    const { deps, err } = makeDeps({}, { fetchJson });
+
+    expect(await run(["models", "--verbose"], deps)).toBe(2);
+    expect(err.join("\n")).toContain("Usage:");
+    expect(calls).toEqual([]);
   });
 });
 
