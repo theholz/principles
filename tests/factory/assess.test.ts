@@ -270,6 +270,35 @@ describe("loadBaselineInventory", () => {
     expect(msg).toContain("unverified reuse claim must not enter as ground truth");
   });
 
+  it("trims names on load and REJECTS empty/whitespace-only names per-path", () => {
+    const padded = [{ name: "  engram-memory-api  ", kind: "service", location: "x", status: "built", receipt: "r" }];
+    expect(loadBaselineInventory(JSON.stringify(padded))[0].name).toBe("engram-memory-api");
+
+    const bad = [
+      { name: "", kind: "service", location: "x", status: "gap" },
+      { name: "   ", kind: "skill", location: "y", status: "gap" },
+      { name: "ok", kind: "pipeline", location: "", status: "gap" },
+    ];
+    const msg = errorOf(() => loadBaselineInventory(JSON.stringify(bad)));
+    expect(msg).toContain("names must be non-empty");
+    expect(msg).toContain("0.name");
+    expect(msg).toContain("1.name"); // whitespace-only trims to empty
+    expect(msg).not.toContain("2.name");
+  });
+
+  it("REJECTS case-insensitive duplicate names across the file, listing the colliding names", () => {
+    const dupes = [
+      { name: "Engram-Memory-API", kind: "service", location: "a", status: "built", receipt: "r1" },
+      { name: "engram-memory-api ", kind: "service", location: "b", status: "built", receipt: "r2" }, // trims into collision
+      { name: "unique", kind: "skill", location: "c", status: "gap" },
+    ];
+    const msg = errorOf(() => loadBaselineInventory(JSON.stringify(dupes)));
+    expect(msg).toContain("duplicate names (case-insensitive)");
+    expect(msg).toContain('"Engram-Memory-API"');
+    expect(msg).toContain('"engram-memory-api"');
+    expect(msg).not.toContain("unique");
+  });
+
   it("rejects invalid JSON, bad shapes (per-path), and unknown keys", () => {
     expect(errorOf(() => loadBaselineInventory("not json"))).toContain("not valid JSON");
     expect(errorOf(() => loadBaselineInventory(JSON.stringify({ entries: [] })))).toContain("(root)");
@@ -788,6 +817,52 @@ describe("assess with an operator baseline", () => {
       { name: "engram-memory-api", kind: "service", location: "engram/api/memory", status: "built" },
       ...CLASSIFIED_INVENTORY,
     ]);
+    // Same name + same location: the silent drop is the feature — no collision note.
+    expect(result.notes.some((n) => n.includes("baseline collision"))).toBe(false);
+  });
+
+  it("notes the dropped classified row when a baseline entry shares its name but a DIFFERENT location", async () => {
+    const { llm } = scriptedLlm({
+      capability_inventory: () => ({
+        inventory: [
+          // Same name as the baseline entry, but the scan claims it lives elsewhere.
+          { name: "engram-memory-api", kind: "service", location: "some/other/place", status: "partial" },
+          ...CLASSIFIED_INVENTORY,
+        ],
+      }),
+    });
+    const result = await assess(llm, PROBLEM, {
+      roots: ["/plugins"],
+      fs: fixtureFs(defaultFiles),
+      entryIdGen: seqIds(),
+      baseline: BASELINE,
+    });
+
+    // The classified row is still dropped in favor of the operator row...
+    expect(result.assessment.inventory.filter((e) => e.name === "engram-memory-api")).toEqual([
+      { name: "engram-memory-api", kind: "service", location: "engram/api/memory", status: "built" },
+    ]);
+    // ...and the location disagreement is observable: dropped name + location vs the baseline's.
+    const note = result.notes.find((n) => n.includes("baseline collision"));
+    expect(note).toBeDefined();
+    expect(note).toContain('"engram-memory-api"');
+    expect(note).toContain("some/other/place");
+    expect(note).toContain("engram/api/memory");
+  });
+
+  it("renders a newline-bearing receipt single-line: whitespace runs collapse to single spaces before truncation", async () => {
+    const multiline = "engram/api/memory/routes.py:42\n  — /api/memory/find handler\n\tverified 2026-07-20";
+    const { llm, calls } = scriptedLlm();
+    await assess(llm, PROBLEM, {
+      roots: ["/plugins"],
+      fs: fixtureFs(defaultFiles),
+      baseline: [{ name: "engram-memory-api", kind: "service", location: "engram/api/memory", status: "built", receipt: multiline }],
+    });
+
+    const classify = calls.find((c) => c.schemaName === "capability_inventory")!;
+    const collapsed = "engram/api/memory/routes.py:42 — /api/memory/find handler verified 2026-07-20";
+    expect(classify.prompt).toContain(`"${collapsed}"`);
+    expect(classify.prompt).not.toContain(multiline); // the raw multi-line form never reaches a prompt
   });
 
   it("a hostile receipt is bounded exactly like a scanned hint before it reaches any prompt", async () => {
