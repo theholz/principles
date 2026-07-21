@@ -204,6 +204,40 @@ const scanPluginDir = (fs: AssessFs, name: string, dir: string, add: (c: ScanCan
   }
 };
 
+/** Parse a version-dir name as numeric semver (`x.y.z`, optionally `x.y` —
+ * missing patch reads as 0). Null for anything else (hash names, "unknown"). */
+const parseSemver = (name: string): [number, number, number] | null => {
+  const m = /^(\d+)\.(\d+)(?:\.(\d+))?$/.exec(name);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3] ?? "0")] : null;
+};
+
+/**
+ * Pick the version dir to scan from a versioned-marketplace plugin's
+ * qualifying children (PR #2 review finding: real caches mix hash-named dirs
+ * like `9ddfad2e9997` and `unknown` alongside semver, and plain lex sort
+ * picks those over semver — and orders `0.10.0` below `0.9.0`). Order:
+ *   1. numeric-semver names (x.y.z / x.y), highest by component comparison;
+ *   2. every non-semver name ranks below ALL semver names;
+ *   3. ties (and semver-less sets): lexicographically last.
+ * Precondition: names is non-empty.
+ */
+export function pickVersionDir(names: string[]): string {
+  let best = names[0];
+  let bestVer = parseSemver(best);
+  for (const name of names.slice(1)) {
+    const ver = parseSemver(name);
+    if (ver && bestVer) {
+      const cmp = ver[0] - bestVer[0] || ver[1] - bestVer[1] || ver[2] - bestVer[2];
+      if (cmp > 0 || (cmp === 0 && name > best)) [best, bestVer] = [name, ver];
+    } else if (ver) {
+      [best, bestVer] = [name, ver]; // semver beats any non-semver incumbent
+    } else if (!bestVer && name > best) {
+      best = name; // non-semver never displaces semver; among themselves, lex last
+    }
+  }
+  return best;
+}
+
 /**
  * Walk the configured roots collecting capability candidates: plugin dirs
  * (marked by .claude-plugin/plugin.json), skills (skills/<name>/SKILL.md, or a
@@ -218,8 +252,9 @@ const scanPluginDir = (fs: AssessFs, name: string, dir: string, add: (c: ScanCan
  *     entries from problem clauses). A <name> dir carrying no direct plugin
  *     marker, SKILL.md, or skills/ has its children checked for versioned
  *     plugin dirs (marked by .claude-plugin/plugin.json OR skills/); the
- *     lexicographically LAST qualifying version is scanned as the plugin dir,
- *     with entry name <name>.
+ *     qualifying version picked by pickVersionDir (highest numeric semver;
+ *     hash-named / "unknown" dirs rank below all semver) is scanned as the
+ *     plugin dir, with entry name <name>.
  */
 export function scanRoots(fs: AssessFs, roots: string[]): ScanResult {
   const candidates: ScanCandidate[] = [];
@@ -250,11 +285,11 @@ export function scanRoots(fs: AssessFs, roots: string[]): ScanResult {
       const hasDirectMarkers =
         fs.exists(`${dir}/.claude-plugin/plugin.json`) || fs.exists(`${dir}/SKILL.md`) || fs.exists(`${dir}/skills`);
       if (!hasDirectMarkers) {
-        const versions = safeReaddir(fs, dir)
-          .filter((v) => fs.exists(`${dir}/${v}/.claude-plugin/plugin.json`) || fs.exists(`${dir}/${v}/skills`))
-          .sort();
+        const versions = safeReaddir(fs, dir).filter(
+          (v) => fs.exists(`${dir}/${v}/.claude-plugin/plugin.json`) || fs.exists(`${dir}/${v}/skills`)
+        );
         if (versions.length > 0) {
-          scanPluginDir(fs, entry, `${dir}/${versions[versions.length - 1]}`, add);
+          scanPluginDir(fs, entry, `${dir}/${pickVersionDir(versions)}`, add);
         }
       }
     }

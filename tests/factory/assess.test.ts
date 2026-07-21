@@ -3,6 +3,7 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   assess,
   assignEntryIds,
+  pickVersionDir,
   scanRoots,
   triageCitationCritique,
   AssessFs,
@@ -172,7 +173,7 @@ describe("scanRoots", () => {
     ]);
   });
 
-  it("picks the lexicographically last version when the cache holds several", () => {
+  it("picks the highest semver version when the cache holds several", () => {
     const files = {
       "/cache/toolkit/0.1.0/skills/alpha/SKILL.md": "---\ndescription: old alpha\n---\nbody",
       "/cache/toolkit/0.2.0/skills/alpha/SKILL.md": "---\ndescription: new alpha\n---\nbody",
@@ -183,12 +184,43 @@ describe("scanRoots", () => {
     ]);
   });
 
+  // PR #2 review finding: real caches mix hash-named dirs (9ddfad2e9997) and
+  // "unknown" alongside semver — the old lex-last pick chose those over semver.
+  it("versioned plugin mixing a hash dir with a semver dir yields the semver dir's skills", () => {
+    const files = {
+      "/cache/toolkit/9ddfad2e9997/skills/alpha/SKILL.md": "---\ndescription: hash-cached alpha\n---\nbody",
+      "/cache/toolkit/1.6.0/skills/alpha/SKILL.md": "---\ndescription: released alpha\n---\nbody",
+    };
+    const scan = scanRoots(fixtureFs(files), ["/cache"]);
+    expect(scan.candidates).toEqual([
+      { name: "alpha", kind: "skill", location: "/cache/toolkit/1.6.0/skills/alpha", hint: "released alpha", source: "fs" },
+    ]);
+  });
+
   it("does NOT descend into a flat plugin dir's children (a skills/ subdir is not a version)", () => {
     // /plugins/methodologies has direct markers — its children (.claude-plugin,
     // skills, hooks) must never be treated as version dirs.
     const scan = scanRoots(fixtureFs(defaultFiles), ["/plugins"]);
     expect(scan.candidates.map((c) => c.name)).toEqual(["methodologies", "dmaic", "gate"]);
     expect(scan.candidates.every((c) => !c.location.includes("/skills/skills"))).toBe(true);
+  });
+});
+
+describe("pickVersionDir", () => {
+  it("compares semver numerically, not lexicographically (0.10.0 beats 0.9.0)", () => {
+    expect(pickVersionDir(["0.9.0", "0.10.0"])).toBe("0.10.0");
+  });
+
+  it("semver beats a hash-named dir regardless of lex order", () => {
+    expect(pickVersionDir(["1.6.0", "9ddfad2e9997"])).toBe("1.6.0");
+  });
+
+  it("semver beats an 'unknown' dir", () => {
+    expect(pickVersionDir(["unknown", "0.1.0"])).toBe("0.1.0");
+  });
+
+  it("a lone non-semver dir is still picked (still scanned)", () => {
+    expect(pickVersionDir(["9ddfad2e9997"])).toBe("9ddfad2e9997");
   });
 });
 
