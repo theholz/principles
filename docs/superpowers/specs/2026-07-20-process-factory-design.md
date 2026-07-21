@@ -377,3 +377,33 @@ or never); demotion on miss; trust decays with model changes; operator owns ever
 threshold and every "met" (WL-37 canon). Constraint discipline applies to the operator
 as constraint: exploit (cheap evidence-attached reviews) and subordinate (WIP-capped
 review queues) before elevate (delegation).
+
+---
+
+## 17. The governance-factory instance (spec candidate, addendum 2026-07-21)
+
+Operator direction: a factory deployment with **no stake in any other project**, existing to
+build and maintain the governance plane (agt_full) — the second independence pole beside the
+advisor (which watches everything it is not part of; this builds the watcher it is not
+subject to). Resolves the circularity of a governed factory maintaining its own governor.
+
+Design commitments:
+1. **Instance, not fork.** Same engine (this repo); independence lives in deployment
+   config: separate checkout/profile, own hand-authored seed spec ("maintain the
+   governance plane"), own registry and forecast ledger, roots pointed at agt_full.
+   No second codebase; no drift tax.
+2. **Independence is not autonomy — shortest rope in the fleet.** Supervision is entirely
+   review-time, because the surface is small, rarely-run, and maximally watched: every
+   run operator-invoked (§16 initiative rule at full strength), every output a draft PR,
+   cross-family review mandatory, no standing schedules, no self-directed scans of
+   governance surfaces.
+3. **Per-domain trust résumé.** Its calibration ledger is the only admissible evidence
+   for ever graduating any governance-adjacent decision class — collected from day one,
+   judged by the operator.
+4. **Disaster recovery property:** no stake in platform memory/config means platform
+   corruption (the brain-hub goals/memory-poisoning class) cannot reach the governance
+   maintainer.
+5. *Quis custodiet* lands on the operator + opposite-family review, by design.
+
+Eventually D-entry-shaped for the Engram/AGT decision log: it defines who may build the
+thing that governs everyone.
