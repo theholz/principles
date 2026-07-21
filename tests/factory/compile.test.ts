@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { compileProcess, enrichObjective, ENRICHMENT_MARKER } from "../../src/factory/compile";
+import {
+  compileProcess,
+  enrichObjective,
+  ENRICHMENT_MARKER,
+  CONTEXT_ONLY_INSTRUCTION,
+  NORMATIVE_CONSTRAINT_FRAMING,
+} from "../../src/factory/compile";
 import { loadProcessSpec } from "../../src/factory/loadSpec";
 import { validateProcessSpec } from "../../src/factory/validators";
 import { AssessFs } from "../../src/factory/assess";
@@ -302,15 +308,30 @@ describe("compileProcess", () => {
     expect(result.report.some((l) => l.startsWith("Assess note:") && l.includes("downgraded to create_new"))).toBe(true);
   });
 
-  it("prefixes the enriched objective — the marker, constraint, and inventory hits reach the typed_truths prompt", async () => {
+  it("prefixes the enriched objective — marker, context-only instruction, constraint, inventory hits, and normative framing reach the typed_truths prompt", async () => {
     const { llm, calls, countBySchema } = fullPipelineLlm();
     const result = await compileProcess(llm, PROBLEM, { ...baseOpts(), webSurvey: false });
 
     const typedTruths = calls.find((c) => c.schemaName === "typed_truths")!;
     expect(typedTruths.prompt).toContain(ENRICHMENT_MARKER);
+    // Live-run-2 finding: the assessment block must be explicitly bounded as
+    // context, or deriveTruths derives meta-truths about the assessment text.
+    expect(typedTruths.prompt).toContain(CONTEXT_ONLY_INSTRUCTION);
     expect(typedTruths.prompt).toContain("manual review capacity limits throughput");
     expect(typedTruths.prompt).toContain("dmaic [skill, partial]");
     expect(typedTruths.prompt).toContain(PROBLEM);
+    // Live-run-2 finding: without this framing the skeptic rejects constraint-
+    // type truths as descriptive claims ("nothing currently enforces this").
+    expect(typedTruths.prompt).toContain(NORMATIVE_CONSTRAINT_FRAMING);
+
+    // The same shared objective string reaches the skeptic (the factory's only
+    // sanctioned lever into src/core). Filtered to the foundations-stage
+    // attacks: the assess-stage constraint vet runs on the RAW problem.
+    const foundationsAttacks = calls.filter(
+      (c) => c.schemaName === "truth_attack" && c.prompt.includes(ENRICHMENT_MARKER)
+    );
+    expect(foundationsAttacks.length).toBeGreaterThan(0);
+    expect(foundationsAttacks.every((c) => c.prompt.includes(NORMATIVE_CONSTRAINT_FRAMING))).toBe(true);
 
     // webSurvey false: the landscape survey is never requested, survey is empty.
     expect(countBySchema("landscape_survey")).toBe(0);
@@ -318,7 +339,7 @@ describe("compileProcess", () => {
     expect(result.status).toBe("spec_ready");
   });
 
-  it("sorts existing capabilities before gaps in the enrichment prefix", () => {
+  it("sorts existing capabilities before gaps in the enrichment prefix, bounds the assessment before the problem, and appends the normative framing after it", () => {
     const enriched = enrichObjective(PROBLEM, {
       assessment: {
         triageVerdict: { verdict: "create_new", evidence: "e" },
@@ -333,8 +354,13 @@ describe("compileProcess", () => {
       notes: [],
     });
     expect(enriched.startsWith(ENRICHMENT_MARKER)).toBe(true);
+    // The context-only instruction sits on the assessment header line itself.
+    expect(enriched.startsWith(`${ENRICHMENT_MARKER} ${CONTEXT_ONLY_INSTRUCTION}`)).toBe(true);
     expect(enriched.indexOf("built-thing")).toBeLessThan(enriched.indexOf("gap-thing"));
-    expect(enriched.indexOf(ENRICHMENT_MARKER)).toBeLessThan(enriched.indexOf(PROBLEM));
+    // Bounded assessment, then the problem section, then the normative framing.
+    expect(enriched.indexOf(ENRICHMENT_MARKER)).toBeLessThan(enriched.indexOf("## Problem"));
+    expect(enriched.indexOf("## Problem")).toBeLessThan(enriched.indexOf(PROBLEM));
+    expect(enriched.indexOf(PROBLEM)).toBeLessThan(enriched.indexOf(NORMATIVE_CONSTRAINT_FRAMING));
   });
 
   it("feeds an ap-lazy failure back into the second artifact_plan prompt and converges", async () => {
