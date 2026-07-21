@@ -1,0 +1,657 @@
+{
+  "meta": {
+    "name": "engram-business-processes",
+    "version": "0.1.0",
+    "problemStatement": "Define and enforce the business processes for building and maintaining the Engram platform and the agt_full governance plane — intake, plan, implement, review, capture, and the accord-sweep that keeps documentation honest against code — composed from shipped machinery, extending docs/PROCESSES.md, with measurable CTQs and enforcement shipping with every process.",
+    "domain": "platform-operations",
+    "scalingTier": "complex",
+    "lineage": {
+      "parentVersion": null,
+      "improvementProposals": []
+    }
+  },
+  "assessment": {
+    "triageVerdict": {
+      "verdict": "compose",
+      "evidence": "No single shipped entry covers 50% of the six-process need alone; together the machinery covers well above 80%, leaving assembly and wiring, not missing platforms. Intake: factory-intake-skill plus the process-factory meta pack (spec-approval-gate-stub is partial — gate emission built, enforcement stubbed). Plan: writing-plans plus feature-framework. Implement: coding-lane-pipeline plus coding-lane-process-pack plus executing-plans, with coding-lane-fidelity-gates as the shipped deterministic fidelity pattern. Review: d065-adversarial-review-gate plus adversarial-review-receipt-cli plus pr-cross-family-review plus verification-before-completion plus definition-of-done. Capture: capture-pipeline plus retrospective-cadence-check plus retrospective-gate-policy (enforcement live on both planes). Accord-sweep: agt-grounding-sensor plus agt-enforce-gate plus verification-before-completion over the agt-flight-recorder, findings filed to the needs-review-queue. dmaic and theory-of-constraints supply measurement discipline for every process; skill-forge is the only sanctioned path if a thin skill must still be forged; processes-doc is the existing SoT these processes EXTEND, never replace. Remaining gaps (business-process-definitions, accord-sweep-automation, process-ctq-instrumentation) are exactly what this spec assembles — build nothing new outside the skill-forge path."
+    },
+    "inventory": [
+      { "name": "coding-lane-pipeline", "kind": "pipeline", "location": "/home/tait/Projects/engram/agent/coding_lane/graph.py", "status": "built" },
+      { "name": "coding-lane-fidelity-gates", "kind": "gate", "location": "/home/tait/Projects/engram/agent/coding_lane/fidelity.py", "status": "built" },
+      { "name": "coding-lane-process-pack", "kind": "pack-loader", "location": "/home/tait/Projects/engram/agent/coding_lane/process_pack.py", "status": "built" },
+      { "name": "d065-adversarial-review-gate", "kind": "hook", "location": "/home/tait/Projects/engram/.claude/hooks/check_adversarial_review.sh", "status": "built" },
+      { "name": "adversarial-review-receipt-cli", "kind": "cli", "location": "/home/tait/Projects/engram/bin/record-adversarial-review", "status": "built" },
+      { "name": "needs-review-queue", "kind": "endpoint", "location": "/home/tait/Projects/engram/agent/routes/workflow.py", "status": "built" },
+      { "name": "retrospective-cadence-check", "kind": "service", "location": "/home/tait/Projects/engram/agent/services/retrospective_cadence.py", "status": "built" },
+      { "name": "pr-cross-family-review", "kind": "service", "location": "/home/tait/Projects/engram/agent/services/pr_cross_family_review.py", "status": "built" },
+      { "name": "shared-operator-sot", "kind": "doc-sot", "location": "/home/tait/Projects/engram/docs/superpowers/WORKLIST.md", "status": "built" },
+      { "name": "processes-doc", "kind": "doc-sot", "location": "/home/tait/Projects/engram/docs/PROCESSES.md", "status": "built" },
+      { "name": "orchestrator-log-discipline", "kind": "doc-sot", "location": "/home/tait/Projects/engram/docs/superpowers/operator-notes/ORCHESTRATOR-LOG.md", "status": "built" },
+      { "name": "phase-status-discipline", "kind": "doc-sot", "location": "/home/tait/Projects/engram/docs/superpowers/operator-notes/PHASE-STATUS.md", "status": "built" },
+      { "name": "retrospectives-corpus", "kind": "doc-sot", "location": "/home/tait/Projects/engram/docs/superpowers/retrospectives/", "status": "built" },
+      { "name": "agt-grounding-sensor", "kind": "endpoint", "location": "/home/tait/Projects/agt_full/services/governance-advisor/src/governance_advisor/routes/grounding.py", "status": "built" },
+      { "name": "agt-enforce-gate", "kind": "endpoint", "location": "/home/tait/Projects/agt_full/services/governance-advisor/src/governance_advisor/routes/enforce.py", "status": "built" },
+      { "name": "agt-flight-recorder", "kind": "log", "location": "/home/tait/Projects/agt_full/config/control-plane/flight-recorder.jsonl", "status": "built" },
+      { "name": "retrospective-gate-policy", "kind": "policy", "location": "/home/tait/Projects/agt_full/policies/retrospective-gate.yaml", "status": "built" },
+      { "name": "factory-intake-skill", "kind": "skill", "location": "/home/tait/Projects/engram-plugins/plugins/process-factory-meta/0.1.0/skills/factory-intake", "status": "built" },
+      { "name": "spec-approval-gate-stub", "kind": "gate", "location": "/home/tait/Projects/engram-plugins/plugins/process-factory-meta/0.1.0/gates/spec-approval-gate.md", "status": "partial" },
+      { "name": "skill-forge", "kind": "skill", "location": "/home/tait/Projects/engram-plugins/plugins/skill-forge/skills/skill-forge", "status": "built" },
+      { "name": "capture-pipeline", "kind": "skill", "location": "/home/tait/Projects/engram-plugins/plugins/capture/skills/capture-pipeline", "status": "built" },
+      { "name": "definition-of-done", "kind": "skill", "location": "/home/tait/Projects/engram-plugins/plugins/dev-workflow/skills/definition-of-done", "status": "built" },
+      { "name": "feature-framework", "kind": "skill", "location": "/home/tait/Projects/engram-plugins/plugins/dev-workflow/skills/feature-framework", "status": "built" },
+      { "name": "dmaic", "kind": "skill", "location": "/home/tait/Projects/engram-plugins/plugins/methodologies/skills/dmaic", "status": "built" },
+      { "name": "theory-of-constraints", "kind": "skill", "location": "/home/tait/Projects/engram-plugins/plugins/methodologies/skills/theory-of-constraints", "status": "built" },
+      { "name": "writing-plans", "kind": "skill", "location": "/home/tait/Projects/engram-plugins/plugins/superpowers/skills/writing-plans", "status": "built" },
+      { "name": "executing-plans", "kind": "skill", "location": "/home/tait/Projects/engram-plugins/plugins/superpowers/skills/executing-plans", "status": "built" },
+      { "name": "verification-before-completion", "kind": "skill", "location": "/home/tait/Projects/engram-plugins/plugins/superpowers/skills/verification-before-completion", "status": "built" },
+      { "name": "langfuse", "kind": "service", "location": "localhost:3100", "status": "built" }
+    ],
+    "constraint": {
+      "id": "c1",
+      "flowSteps": ["intake", "plan", "implement", "review", "capture", "accord-sweep"],
+      "statement": "Building generates process and documentation drift faster than maintenance pays it down: every build session adds claims to the doc plane whose verification is manual, so unverified and refuted claims accumulate between sweeps.",
+      "type": "policy",
+      "exploitOptions": [
+        "Route file:line and receipt claims through the built agt-grounding-sensor at review and sweep time instead of agents re-reading their own summaries",
+        "Run the shipped retrospective-cadence-check plus retrospective-gate-policy pair as the standing pay-down trigger — capture enforcement already exists on both planes",
+        "Extend processes-doc and the existing doc-sot homes instead of minting parallel process documents"
+      ],
+      "subordinateOptions": [
+        "Subordinate build throughput to the sweep: accord findings sitting unresolved in the needs-review-queue block new phase starts in the affected area",
+        "Consolidate the duplicate operator planes (operator-copilot vs operator-notes) toward one canonical home per artifact type so maintenance verifies one surface, not several",
+        "Capture declares doc obsolescence at session end so each sweep starts from a marked list, not a full scan"
+      ],
+      "elevateOptions": [
+        "Automate the sweep on the Langfuse x flight-recorder scoring integration so drift detection stops consuming operator attention (the accord-sweep-automation gap)",
+        "Schedule sweeps via n8n or Temporal at accordSweepCadenceDays instead of relying on manual invocation"
+      ],
+      "evidence": "The memory-quality accord refuted 6 documented claims against code and disk — docs asserting capabilities that did not exist — and the operator's live S18.1 example shows Grok and Claude building the same artifacts in different homes (operator-copilot vs operator-notes planes). That evidences a STOCK of drift; the rate claim (faster than maintenance pays it down) was demoted to assumption tier by the compile's skeptic because no drift rate has ever been measured. The spec proceeds as if it holds (assumption a1); ctq3 (drift findings per sweep) is the resolving measurement."
+    }
+  },
+  "foundations": {
+    "truths": [
+      {
+        "id": "t1",
+        "type": "constraint",
+        "statement": "Every process artifact type has exactly one canonical home at the repository level, and every agent on every surface reads and writes that same home.",
+        "rationale": "S18.1: drift's root cause is not missing practice but the same practice done in different places; emitted packs declare artifact locations as contract, not convention. The operator-copilot vs operator-notes duplication is the live violation this rule exists to close."
+      },
+      {
+        "id": "t2",
+        "type": "constraint",
+        "statement": "A process ships together with its enforcement — a gate, hook, or fidelity check — or it does not ship.",
+        "rationale": "S18.5: enforcement is not optional; the historical failure mode is processes that were built, never enforced, and therefore never used."
+      },
+      {
+        "id": "t3",
+        "type": "constraint",
+        "statement": "Skills attached to a process are mandatory: an agent cannot progress a phase until the required skill is loaded, with artifact evidence of use.",
+        "rationale": "S18.6, the WL-GOV-03 fidelity pattern: a skill on a process IS the process; loading is proven by artifact evidence, never merely claimed."
+      },
+      {
+        "id": "t4",
+        "type": "constraint",
+        "statement": "The only legitimate exit from a process an agent chafes at is a filed change proposal in the needs-review queue — never a bypass.",
+        "rationale": "S18.7 with D-044: escape valve priced in, bypass priced out; agency comes with a price and proposals are how it is paid."
+      },
+      {
+        "id": "t5",
+        "type": "constraint",
+        "statement": "Every agent and model runs the same process definition; only enforcement intensity varies per agent-and-model pair.",
+        "rationale": "S18.8: consistency is what makes process measurable; packs carry one process definition plus per-agent enforcement profiles (the agent-surfaces-registry is the calibration key), never per-agent process forks."
+      },
+      {
+        "id": "t6",
+        "type": "constraint",
+        "statement": "Skill binding inside a process is deterministic — the process states when doing X, load skill Y; semantic search is never the delivery mechanism for a known requirement.",
+        "rationale": "S18.9: the semantic skill-router was found inaccurate for process flows (the finding that led to the factory); coding-lane-process-pack is the shipped precedent for pinned bindings, with the router retained for genuine discovery only."
+      },
+      {
+        "id": "t7",
+        "type": "constraint",
+        "statement": "Design documents die after build: once built, either a detailed spec of what IS exists or the code is obvious enough to need none, and accord sweeps enforce promote-or-demote.",
+        "rationale": "S18.2 and D-067: no orphaned intent docs; code-as-spec preferred; the accord sweep is the named migration mechanism."
+      },
+      {
+        "id": "t8",
+        "type": "constraint",
+        "statement": "Every process carries measurable CTQs with honest baselines: a value is real and cited, or it is the literal unmeasured — never invented.",
+        "rationale": "S18 read with the S14 measurement doctrine: agents perform according to how they are measured; proxy metrics are monitored, never targeted, and an invented baseline poisons the entire improvement loop."
+      }
+    ],
+    "assumptions": [
+      {
+        "id": "a1",
+        "type": "assumption",
+        "statement": "Building generates process and documentation drift faster than maintenance currently pays it down.",
+        "rationale": "Demoted to assumption by the compile's skeptic: the memory-quality accord evidences a stock of drift (6 refuted claims), not a measured rate. The spec proceeds as if the claim holds; ctq3 (drift findings per accord sweep, target declining) is the measurement that resolves it either way."
+      }
+    ],
+    "rejected": [],
+    "subtasks": [
+      {
+        "id": "s1",
+        "description": "Define and bind the intake process: every unit of work enters through one intake step and exists as exactly one WORKLIST.md row with a one-sentence problem statement before any planning begins.",
+        "servesTruths": ["t1", "t6"],
+        "dependsOn": []
+      },
+      {
+        "id": "s2",
+        "description": "Define and bind the plan process: every non-trivial work item gets one plan authored under writing-plans with feature-framework inventory discipline, living in docs/superpowers/plans/ with binary done criteria and a declared post-build fate.",
+        "servesTruths": ["t1", "t3", "t6", "t7"],
+        "dependsOn": ["s1"]
+      },
+      {
+        "id": "s3",
+        "description": "Define and bind the implement process: all implementation on every surface follows plan, branch plus draft PR, sandboxed execution, and implement receipts on the coding-lane pattern — one process, enforcement intensity calibrated per agent.",
+        "servesTruths": ["t2", "t3", "t5", "t6"],
+        "dependsOn": ["s2"]
+      },
+      {
+        "id": "s4",
+        "description": "Define and bind the review process: every non-trivial change receives an adversarial, opposite-family-preferred, submitted review with receipts before landing on main, with file:line claims grounded through the AGT sensor.",
+        "servesTruths": ["t2", "t4", "t5"],
+        "dependsOn": ["s3"]
+      },
+      {
+        "id": "s5",
+        "description": "Define and bind the capture process: session learnings become receipt-citing retrospectives on cadence, binding decisions become D-entries, and process outcomes are recorded where the measurement plane reads them.",
+        "servesTruths": ["t1", "t3", "t7", "t8"],
+        "dependsOn": ["s4"]
+      },
+      {
+        "id": "s6",
+        "description": "Define and bind the accord-sweep process: on cadence, verify the doc plane's load-bearing claims against code and disk via the grounding sensor, file refuted claims to needs-review with evidence, and promote-or-demote every post-build design doc.",
+        "servesTruths": ["t1", "t7", "t8"],
+        "dependsOn": ["s5"]
+      },
+      {
+        "id": "s7",
+        "description": "Wire CTQ instrumentation into the Langfuse x flight-recorder scoring integration so process adoption, gate pass rate, drift findings, capture cadence, and proposal latency are measured, not asserted.",
+        "servesTruths": ["t8"],
+        "dependsOn": ["s1", "s2", "s3", "s4", "s5", "s6"]
+      }
+    ],
+    "coverageMap": [
+      { "dimension": "intake", "handledBy": "s1", "exclusionReason": "" },
+      { "dimension": "plan", "handledBy": "s2", "exclusionReason": "" },
+      { "dimension": "implement", "handledBy": "s3", "exclusionReason": "" },
+      { "dimension": "review", "handledBy": "s4", "exclusionReason": "" },
+      { "dimension": "capture", "handledBy": "s5", "exclusionReason": "" },
+      { "dimension": "accord-sweep", "handledBy": "s6", "exclusionReason": "" },
+      { "dimension": "CTQ instrumentation and scoring", "handledBy": "s7", "exclusionReason": "" },
+      {
+        "dimension": "live gate code implementation",
+        "handledBy": "",
+        "exclusionReason": "Engram-side wiring that follows pack adoption: the generated gates ship as deterministic spec stubs (the spec-approval-gate-stub precedent — gate emission built, enforcement stubbed) and receive live hook code in the Engram checkout once the pack is adopted."
+      }
+    ],
+    "survey": []
+  },
+  "contract": {
+    "ctqs": [
+      {
+        "id": "ctq1",
+        "persona": "platform operator",
+        "metric": "process adoption — share of qualifying sessions that load the bound process skills and leave the declared artifact evidence",
+        "specLimit": "at least 80% of qualifying sessions show skill-load plus artifact evidence within two sweep windows of pack adoption",
+        "defectDefinition": "a qualifying session that progressed a process phase without loading the bound skill or without leaving the declared artifact in its canonical home"
+      },
+      {
+        "id": "ctq2",
+        "persona": "implement and review stewards",
+        "metric": "gate pass rate on first presentation — fidelity checks and the D-065 adversarial-review gate",
+        "specLimit": "gate pass rate is tracked per sweep window with no non-trivial change landing on main ungated",
+        "defectDefinition": "work presented to a gate that fails mechanically, or a non-trivial commit landing on main without a matching D-065 receipt or submitted non-author review"
+      },
+      {
+        "id": "ctq3",
+        "persona": "accord-sweeper",
+        "metric": "drift findings per accord sweep — load-bearing doc claims refuted against code or disk",
+        "specLimit": "finding count declines across consecutive sweeps, trending toward zero",
+        "defectDefinition": "a sweep whose refuted-claim count does not decline versus the prior sweep, or any refuted claim left unfiled in the needs-review queue"
+      },
+      {
+        "id": "ctq4",
+        "persona": "capture steward",
+        "metric": "capture cadence compliance — retrospectives produced per D-043 trigger (5 merged PRs or 2 weeks)",
+        "specLimit": "100% of cadence triggers produce a retrospective in docs/superpowers/retrospectives/ within the window",
+        "defectDefinition": "a retrospective-cadence-check firing with no retrospective authored inside its window"
+      },
+      {
+        "id": "ctq5",
+        "persona": "any agent filing a process-change proposal",
+        "metric": "proposal loop latency — needs-review entry to operator decision",
+        "specLimit": "median decision inside one sweep window (accordSweepCadenceDays)",
+        "defectDefinition": "a process-change proposal sitting in needs-review beyond one full sweep window without an operator decision"
+      }
+    ],
+    "baseline": "unmeasured — capture-cadence machinery exists and fires (retrospective-cadence-check, retrospective-gate-policy; three retrospectives in docs/superpowers/retrospectives/), but no rate has been measured for any CTQ; all five start unmeasured and are wired for measurement by s7.",
+    "decisionRule": "If any CTQ records a defect inside a sweep window, the accord-sweeper files an improvement proposal (spec diff plus evidence) in the needs-review queue; two consecutive defective windows on the same CTQ escalate to the operator; nothing is ever auto-applied (D-044).",
+    "controlPlan": {
+      "monitoringCadence": "every accord sweep (accordSweepCadenceDays, default 30), scored through the Langfuse x flight-recorder integration the operator has in progress; the D-043 retrospective cadence (5 merged PRs or 2 weeks) interleaves as the capture-side check",
+      "response": "file a needs-review proposal with evidence for the operator to judge; never auto-apply (D-044)"
+    },
+    "governancePhase": "shadow"
+  },
+  "roles": [
+    {
+      "id": "agent-s1",
+      "name": "intake-steward",
+      "subtaskId": "s1",
+      "instructions": "MISSION: own the intake process for all Engram and agt_full work.\n\nCURRENT STATE: factory-intake-skill (/home/tait/Projects/engram-plugins/plugins/process-factory-meta/0.1.0/skills/factory-intake) covers factory intake only; the session_start_advisory.sh hook (engram/.claude/hooks/) surfaces branch, dirty state, and open plans at session start; WORKLIST.md (/home/tait/Projects/engram/docs/superpowers/WORKLIST.md, D-015) is THE shared work list. But general work intake is unbound: items arrive via chat and scatter across duplicate operator planes (superpowers/operator-copilot vs operator-notes vs superpowers root) — the live S18.1 violation.\n\nTARGET STATE: every unit of work enters through one intake step and exists as exactly one WORKLIST.md row before any planning or building begins — no parallel todo ledgers on any surface.\n\nSTEPS:\n1. On any new work request, load the process-intake skill (mandatory, t3/t6).\n2. Restate the problem in one sentence; classify trivial vs non-trivial per PROCESSES.md section 4.3.\n3. Record one WORKLIST.md row (WL-id, statement, classification, links). WORKLIST.md is the only intake ledger; do not create or extend MASTER-TODO or any operator-copilot list — when a parallel ledger is found, consolidate it toward the declared home.\n4. Check DECISIONS.md for governing D-entries; record conflicts in the WL row rather than resolving them silently.\n5. For non-trivial work, confirm the restatement with the operator before handoff.\n6. Hand the WL-id to the plan process. If intake reveals skill-shaped work, route it to skill-forge — the only sanctioned skill-minting path.\n\nCANONICAL HOMES (contract, not convention): work items go to engram/docs/superpowers/WORKLIST.md; decisions consulted (read-only here) live in engram/docs/superpowers/DECISIONS.md. The operator-copilot vs operator-notes duplication MUST consolidate toward these declared homes; an intake artifact found anywhere else is a canonical-home-gate finding.\n\nMANDATORY SKILL BINDINGS (deterministic, S18.9): when receiving any work, load process-intake; when the work is minting a new process pack, load factory-intake; when the work is minting a new skill, load skill-forge.\n\nENFORCEMENT POINTS: session_start_advisory.sh (built hook) surfaces open intake state at session start; process-fidelity-gate checks skill-load plus WL-row evidence — currently a documented spec stub, not live hook code, and any claim about it must say so; canonical-home-gate flags intake writes outside WORKLIST.md — also a documented stub.\n\nCLEANUP (S18.4): before handoff, promote any scratch todo notes into WL rows or delete them; leave no intake state another agent must puzzle over.\n\nDONE-WHEN (binary): a WORKLIST.md row exists for the item with a one-sentence problem statement and classification, operator-confirmed if non-trivial, and no parallel intake artifact exists anywhere else — yes or no.",
+      "servesTruths": ["t1", "t6"],
+      "dependsOn": [],
+      "outputHint": "A WORKLIST.md row: WL-id, one-sentence problem statement, classification, links, operator confirmation for non-trivial work.",
+      "ctqIds": ["ctq1"]
+    },
+    {
+      "id": "agent-s2",
+      "name": "plan-steward",
+      "subtaskId": "s2",
+      "instructions": "MISSION: own the plan process for all non-trivial Engram and agt_full work.\n\nCURRENT STATE: writing-plans and executing-plans (/home/tait/Projects/engram-plugins/plugins/superpowers/skills/) are lived practice; feature-framework (/home/tait/Projects/engram-plugins/plugins/dev-workflow/skills/feature-framework) carries the inventory discipline (confirm gaps, don't assume) and the reuse record; coding-lane-fidelity-gates (/home/tait/Projects/engram/agent/coding_lane/fidelity.py) already deterministically check plan structure for coding_lane runs; PHASE-STATUS.md (engram/docs/superpowers/operator-notes/) is the where-are-we SoT. But plan authoring outside coding_lane is ungated, and finished plans orphan into intent docs — the D-067 problem.\n\nTARGET STATE: every non-trivial WL item has exactly one plan in docs/superpowers/plans/, authored under writing-plans with feature-framework inventory discipline, carrying binary done criteria and a declared post-build fate.\n\nSTEPS:\n1. When authoring any plan, load writing-plans (mandatory).\n2. For feature-shaped work, load feature-framework FIRST: inventory scan before design, reuse decisions recorded — building what already exists is a defect.\n3. Write the plan to engram/docs/superpowers/plans/YYYY-MM-DD-name.md citing the WL-id. That directory is the only plan home.\n4. Load definition-of-done and give every phase binary done criteria plus named verification steps.\n5. Update PHASE-STATUS.md whenever the plan changes wave or phase state.\n6. Declare the plan's death (t7): on build completion it is promoted to a spec of what IS, or demoted to archive at the next accord sweep; write this expectation into the plan header.\n\nCANONICAL HOMES: plans live in engram/docs/superpowers/plans/ (one file per plan); phase state lives in operator-notes/PHASE-STATUS.md; the WL row links the plan. Any plan-shaped notes found in operator-copilot consolidate toward plans/.\n\nMANDATORY SKILL BINDINGS (S18.9): when writing a plan, load writing-plans; for feature-shaped work, load feature-framework before design; when defining done criteria, load definition-of-done.\n\nENFORCEMENT POINTS: coding-lane-fidelity-gates (built, deterministic, no-LLM) enforce plan structure for lane runs — the shipped pattern this process generalizes; process-fidelity-gate extends the same check to all plan-bearing work but is currently a documented spec stub, not live code.\n\nCLEANUP (S18.4): no plan drafts outside plans/; superseded plans are marked superseded in place, never silently deleted or left ambiguously current.\n\nDONE-WHEN (binary): the plan file exists in plans/ citing its WL-id, every phase has binary done criteria and named verification steps, PHASE-STATUS.md reflects it, and the post-build fate is declared in the header — yes or no.",
+      "servesTruths": ["t1", "t3", "t6", "t7"],
+      "dependsOn": ["agent-s1"],
+      "outputHint": "A plan file in engram/docs/superpowers/plans/ with WL-id, binary done criteria, verification steps, and a declared post-build fate.",
+      "ctqIds": ["ctq1"]
+    },
+    {
+      "id": "agent-s3",
+      "name": "implement-steward",
+      "subtaskId": "s3",
+      "instructions": "MISSION: own the implement process — plan to verified change, the same way on every surface.\n\nCURRENT STATE: coding-lane-pipeline (/home/tait/Projects/engram/agent/coding_lane/graph.py) is the shipped implement lane; coding-lane-process-pack (/home/tait/Projects/engram/agent/coding_lane/process_pack.py) pins skills into plan and implement stages deterministically — the S18.9 precedent; execution runs sandboxed via Daytona (engram/agent/coding_lane/sandbox.py, D-029/D-039); coding-lane-fidelity-gates (fidelity.py) check implement receipts; executing-plans and verification-before-completion (/home/tait/Projects/engram-plugins/plugins/superpowers/skills/) exist. But only coding_lane work gets this treatment; ad-hoc implementation on other surfaces escapes the pattern.\n\nTARGET STATE: all implementation, on every surface and model, follows the SAME process (t5): plan, then branch plus draft PR for multi-file work (D-016), sandboxed execution for agent product work (D-029), an implement receipt, and verification before any completion claim. Per-agent variation is enforcement intensity only, calibrated via the agent-surfaces-registry — never a different process.\n\nSTEPS:\n1. When executing any plan, load executing-plans (mandatory).\n2. Work the plan's steps in order; deviations become WL notes or filed change proposals, never silent improvisation (t4).\n3. Multi-file or product work goes on a branch with a draft PR; agent product work runs sandboxed in Daytona; the host checkout stays on main (PROCESSES.md section 1).\n4. Leave an implement receipt in the shape fidelity.py checks: what changed, where, and which verification ran. Session gate notes go to ORCHESTRATOR-LOG.md.\n5. Before claiming any phase done, load verification-before-completion, run the plan's named verification, and check against definition-of-done.\n6. Update the WL row and PHASE-STATUS.md.\n\nCANONICAL HOMES: code lives on a branch plus draft PR (never long-lived host branches); implement receipts and gate notes go to engram/docs/superpowers/operator-notes/ORCHESTRATOR-LOG.md (append-only); status goes to PHASE-STATUS.md and the WL row.\n\nMANDATORY SKILL BINDINGS (S18.9): when executing a plan, load executing-plans; before any completion claim, load verification-before-completion; when judging done, load definition-of-done.\n\nENFORCEMENT POINTS: coding-lane-fidelity-gates (built, deterministic) for lane runs; d065-adversarial-review-gate (engram/.claude/hooks/check_adversarial_review.sh — built, blocking, PreToolUse) stops unreviewed non-trivial commits to main; process-fidelity-gate for non-lane work is a documented spec stub, not live code — do not claim otherwise.\n\nCLEANUP (S18.4): tear down sandbox workspaces; delete scratch files; leave no stray branches on the host checkout; the next agent should find only the branch, the PR, the receipt, and the updated WL row.\n\nDONE-WHEN (binary): every plan step is executed or explicitly deferred with a WL note, an implement receipt exists in ORCHESTRATOR-LOG.md, verification-before-completion ran with its evidence recorded, and multi-file work sits in a draft PR — yes or no.",
+      "servesTruths": ["t2", "t3", "t5", "t6"],
+      "dependsOn": ["agent-s2"],
+      "outputHint": "An implement receipt in ORCHESTRATOR-LOG.md plus a draft PR for multi-file work, with verification evidence.",
+      "ctqIds": ["ctq1", "ctq2"]
+    },
+    {
+      "id": "agent-s4",
+      "name": "review-steward",
+      "subtaskId": "s4",
+      "instructions": "MISSION: own the review process — no non-trivial change lands unreviewed.\n\nCURRENT STATE: d065-adversarial-review-gate (/home/tait/Projects/engram/.claude/hooks/check_adversarial_review.sh, built) blocks non-trivial direct-main commits without a receipt; adversarial-review-receipt-cli (/home/tait/Projects/engram/bin/record-adversarial-review) produces staged-tree-hash-bound receipts with 24h expiry; pr-cross-family-review (/home/tait/Projects/engram/agent/services/pr_cross_family_review.py) auto-assigns the opposite family (grok and claude swap) to aging draft PRs (D-054); agt-grounding-sensor (/home/tait/Projects/agt_full/services/governance-advisor/src/governance_advisor/routes/grounding.py) deterministically verifies file:line claims; verification-before-completion and definition-of-done skills exist. Review works when triggered; latency from PR-open to submitted review is unmeasured (ctq5).\n\nTARGET STATE: every non-trivial change receives an adversarial, opposite-family-preferred, SUBMITTED review with receipts before landing on main; review claims are grounded through the sensor, not re-read by the author; proposal and review latency is measured.\n\nSTEPS:\n1. On any review request, load verification-before-completion (reviewer hat) and check the change against definition-of-done and the governing plan.\n2. Review adversarially per PROCESSES.md section 4: tier findings red/yellow/green, ground against code (D-006), check DECISIONS.md first. The author is never the sole reviewer.\n3. Route every file:line claim in the diff description or review through agt-grounding-sensor rather than trusting or self-reading; a refuted claim is a red finding.\n4. Record the outcome: a submitted PR review (PR path) or a bin/record-adversarial-review receipt (direct-main path). PENDING does not count.\n5. Write the gate note to ORCHESTRATOR-LOG.md.\n6. If the process itself obstructs, file a needs-review proposal (t4) — never bypass; bin/approve-skip is the only audited exception path.\n\nCANONICAL HOMES: review receipts live in .claude/tmp/adversarial_review_receipts.jsonl (machine-read by the gate) with the human-readable gate note in ORCHESTRATOR-LOG.md; decision changes arising from review go to DECISIONS.md.\n\nMANDATORY SKILL BINDINGS (S18.9): when reviewing, load verification-before-completion; when judging done, load definition-of-done; when review surfaces a repeating defect class, load dmaic and measure before fixing.\n\nENFORCEMENT POINTS: d065-adversarial-review-gate (built, blocking — the strongest live enforcement in this pack); pr-cross-family-review (built, auto-dispatch); canonical-home-gate flags gate notes written outside ORCHESTRATOR-LOG.md — a documented spec stub, not live code.\n\nCLEANUP (S18.4): no review left PENDING as if submitted; stale review requests resolved or escalated; receipts never reused across staged trees.\n\nDONE-WHEN (binary): every non-trivial change in the window has a submitted non-author review or a valid D-065 receipt, refuted grounding claims are red findings on record, and gate notes exist in ORCHESTRATOR-LOG.md — yes or no.",
+      "servesTruths": ["t2", "t4", "t5"],
+      "dependsOn": ["agent-s3"],
+      "outputHint": "A submitted non-author review or D-065 receipt, plus a gate note in ORCHESTRATOR-LOG.md.",
+      "ctqIds": ["ctq1", "ctq2", "ctq5"]
+    },
+    {
+      "id": "agent-s5",
+      "name": "capture-steward",
+      "subtaskId": "s5",
+      "instructions": "MISSION: own the capture process — sessions must leave verified learnings, not vibes.\n\nCURRENT STATE: capture-pipeline (/home/tait/Projects/engram-plugins/plugins/capture/skills/capture-pipeline) is the shipped capture skill; retrospective-cadence-check (/home/tait/Projects/engram/agent/services/retrospective_cadence.py) fires needs-review on 5 merged PRs or 2 weeks (D-043) and deliberately does not auto-author (cross-model participation required); retrospective-gate-policy (/home/tait/Projects/agt_full/policies/retrospective-gate.yaml) is the ALWAYS-ENFORCE hard-gate twin on the governance plane; docs/superpowers/retrospectives/ holds three retrospectives. Capture cadence machinery exists and is enforced on both planes; the compliance RATE is unmeasured.\n\nTARGET STATE: every cadence trigger produces a retrospective; every binding decision made in a session becomes a D-entry; process outcomes land where the measurement plane reads them; every captured claim carries provenance.\n\nSTEPS:\n1. When capturing session learnings, load capture-pipeline (mandatory).\n2. On a cadence trigger, author the retrospective at engram/docs/superpowers/retrospectives/YYYY-MM-DD-name.md with cross-model participation (D-043). Aim above the operator's retrospective template: every went-wrong finding must be falsifiable and cite a receipt (commit, log line, grounding verdict) — an unfalsifiable finding is a defect, not a learning.\n3. Promote binding decisions to DECISIONS.md as D-entries (append-only); route day-to-day items to WORKLIST.md.\n4. Record process outcomes to the measurement plane — the Langfuse x flight-recorder scoring stream once s7 wiring lands; until then, state outcomes in the retrospective and mark them unmeasured.\n5. When capture reveals a repeating measurable defect class, load dmaic before proposing fixes.\n6. Mark documents made obsolete by the session's work for the accord sweep's promote-or-demote pass (t7).\n\nCANONICAL HOMES: retrospectives live in engram/docs/superpowers/retrospectives/; decisions in DECISIONS.md; work items in WORKLIST.md; gate notes in ORCHESTRATOR-LOG.md. Capture-shaped notes found in operator-copilot (AUDIT-LEDGER and kin) consolidate toward these homes.\n\nMANDATORY SKILL BINDINGS (S18.9): when capturing, load capture-pipeline; when analyzing a defect class, load dmaic.\n\nENFORCEMENT POINTS: retrospective-cadence-check (built, advisory needs-review signal) and retrospective-gate-policy (built, agt_full hard gate, not yolo-bypassable) — capture is the one process with live enforcement on both planes already; ctq4 measures compliance once s7 instrumentation lands.\n\nCLEANUP (S18.4): scratch capture notes are promoted to a canonical home or deleted; memory writes carry provenance (source, method, status per D-053) — a captured claim without provenance is a defect.\n\nDONE-WHEN (binary): for every cadence trigger in the window a retrospective exists with receipt-citing findings, every binding decision has a D-entry, and obsolete docs are flagged for the sweep — yes or no.",
+      "servesTruths": ["t1", "t3", "t7", "t8"],
+      "dependsOn": ["agent-s4"],
+      "outputHint": "A receipt-citing retrospective in docs/superpowers/retrospectives/ plus D-entries for binding decisions and flags for obsolete docs.",
+      "ctqIds": ["ctq1", "ctq4"]
+    },
+    {
+      "id": "agent-s6",
+      "name": "accord-sweeper",
+      "subtaskId": "s6",
+      "instructions": "MISSION: own the accord sweep — keep the documented world equal to the built world.\n\nCURRENT STATE: the substrate is built, the sweep is not. agt-grounding-sensor (/home/tait/Projects/agt_full/services/governance-advisor/src/governance_advisor/routes/grounding.py) deterministically verifies file:line and receipt claims; agt-enforce-gate (routes/enforce.py alongside) supplies may-I-act decisions; agt-flight-recorder (/home/tait/Projects/agt_full/config/control-plane/flight-recorder.jsonl, 95k+ lines) is the append-only audit substrate being orchestrated with Langfuse for scoring (operator, 2026-07-21); the needs-review-queue (/home/tait/Projects/engram/agent/routes/workflow.py) receives findings; verification-before-completion exists. accord-sweep-automation is an acknowledged gap: D-067 names sweeps as the code-as-spec migration mechanism and no automation ships. The memory-quality accord that motivated this pack refuted 6 documented claims against code and disk.\n\nTARGET STATE: on cadence (accordSweepCadenceDays knob, default 30), the doc plane's load-bearing claims are verified against code and disk; refuted claims become needs-review entries with evidence; post-build design docs are promoted to specs of what IS or demoted to archive (D-067); the finding count per sweep declines (ctq3) — which is also what resolves assumption a1.\n\nSTEPS:\n1. Load the accord-sweep skill and verification-before-completion (mandatory).\n2. Enumerate load-bearing claims from the canonical homes: PROCESSES.md, SYSTEM-CAPABILITIES.md, PLATFORM-SOT.md, DECISIONS.md entries with live obligations, WORKLIST rows marked done, and every design doc past its build date.\n3. Classify every claim by provenance tier (S15 Baseline Accord): scanned (fs or registry evidence attached), measured (probe or metric value attached), claimed (unverified — listed loudly).\n4. Route file:line-shaped claims through agt-grounding-sensor — the sweep never verifies by re-reading its own summaries; that is the exact failure mode the sensor exists to kill.\n5. File every refuted claim as a needs-review entry with the evidence attached; propose promote-or-demote for every orphaned design doc.\n6. Record the sweep summary — claims per tier, findings count, docs promoted and demoted — in ORCHESTRATOR-LOG.md and the Langfuse x flight-recorder scoring stream (s7).\n7. If findings indicate the constraint has shifted (drift is no longer the limit), load theory-of-constraints and propose new anchor metrics — that is the improvement loop working correctly, not instability.\n\nCANONICAL HOMES: findings go to the needs-review queue (machine) with the sweep note in ORCHESTRATOR-LOG.md; doc dispositions execute in each doc's own canonical home; the sweep itself creates no new doc plane.\n\nMANDATORY SKILL BINDINGS (S18.9): when sweeping, load accord-sweep and verification-before-completion; when analyzing constraint shift, load theory-of-constraints.\n\nENFORCEMENT POINTS: this process IS the enforcement arm for t7 and the backstop for t1; its own fidelity (did the sweep run, were findings filed) is checked by process-fidelity-gate — a documented spec stub, not live code — and measured by ctq3 once s7 lands. The grounding sensor it depends on is built and live.\n\nCLEANUP (S18.4): the sweep leaves the doc plane strictly cleaner than it found it — every finding filed or fixed, nothing held back in chat or scratch.\n\nDONE-WHEN (binary): a sweep report exists with per-tier claim counts and a findings count, every refuted claim has a needs-review entry with evidence, and every orphaned design doc has a promote-or-demote proposal — yes or no.",
+      "servesTruths": ["t1", "t7", "t8"],
+      "dependsOn": ["agent-s5"],
+      "outputHint": "A sweep report: per-tier claim counts, refuted claims filed to needs-review with evidence, promote-or-demote proposals for orphaned docs.",
+      "ctqIds": ["ctq1", "ctq3"]
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "process-intake",
+      "kind": "skill",
+      "disposition": "generate",
+      "traceability": { "truthIds": ["t1", "t6"], "constraintIds": ["c1"] },
+      "l2Rationale": "Instructional process definition for intake: a skill because it guides and deterministically binds (mandatory load with artifact evidence, S18.6/S18.9) while enforcement lives separately in gates (S18.5); intake is where the one-canonical-home rule first bites, so the skill carries the WORKLIST-only contract.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-plan"],
+        "composesWith": ["skill-forge"],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "process-plan",
+      "kind": "skill",
+      "disposition": "generate",
+      "traceability": { "truthIds": ["t1", "t3", "t6", "t7"], "constraintIds": ["c1"] },
+      "l2Rationale": "Instructional process definition for planning: plan authoring is guidance-shaped, so a skill; it binds writing-plans, feature-framework, and definition-of-done deterministically and carries the plans-directory-only home contract plus the D-067 death-after-build declaration.",
+      "relationships": {
+        "dependsOn": ["process-intake"],
+        "complements": ["process-implement"],
+        "composesWith": ["writing-plans", "feature-framework", "definition-of-done"],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "process-implement",
+      "kind": "skill",
+      "disposition": "generate",
+      "traceability": { "truthIds": ["t2", "t3", "t5", "t6"], "constraintIds": [] },
+      "l2Rationale": "Instructional process definition for implementation: extends the coding-lane deterministic-binding pattern to all surfaces; one process for every agent and model (S18.8) with enforcement intensity calibrated separately — the skill states the process, the gates enforce it.",
+      "relationships": {
+        "dependsOn": ["process-plan"],
+        "complements": ["process-review"],
+        "composesWith": ["executing-plans", "coding-lane-pipeline", "verification-before-completion"],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "process-review",
+      "kind": "skill",
+      "disposition": "generate",
+      "traceability": { "truthIds": ["t2", "t4", "t5"], "constraintIds": [] },
+      "l2Rationale": "Instructional process definition for review: the skill standardizes the adversarial pass and grounding-sensor routing; the blocking behavior stays in the shipped d065 hook — guidance and enforcement deliberately separated (S18.5).",
+      "relationships": {
+        "dependsOn": ["process-implement"],
+        "complements": ["process-capture"],
+        "composesWith": ["d065-adversarial-review-gate", "agt-grounding-sensor", "verification-before-completion", "definition-of-done"],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "process-capture",
+      "kind": "skill",
+      "disposition": "generate",
+      "traceability": { "truthIds": ["t1", "t3", "t7", "t8"], "constraintIds": ["c1"] },
+      "l2Rationale": "Instructional process definition for capture: binds capture-pipeline and dmaic deterministically and carries the retrospectives-and-DECISIONS home contract; receipt-citing findings raise the bar above the operator's retrospective template rather than conforming to it.",
+      "relationships": {
+        "dependsOn": ["process-review"],
+        "complements": ["accord-sweep"],
+        "composesWith": ["capture-pipeline", "dmaic"],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "accord-sweep",
+      "kind": "skill",
+      "disposition": "generate",
+      "traceability": { "truthIds": ["t1", "t7", "t8"], "constraintIds": ["c1"] },
+      "l2Rationale": "Instructional process definition for the accord sweep — the D-067 promote-or-demote mechanism and the pay-down side of constraint c1; a skill because the sweep is a procedure over built sensors (grounding, flight recorder), while its automation remains the acknowledged accord-sweep-automation gap.",
+      "relationships": {
+        "dependsOn": ["process-capture"],
+        "complements": [],
+        "composesWith": ["agt-grounding-sensor", "needs-review-queue", "theory-of-constraints", "agt-flight-recorder"],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "process-fidelity-gate",
+      "kind": "gate",
+      "disposition": "generate",
+      "traceability": { "truthIds": ["t2", "t3", "t6"], "constraintIds": [] },
+      "l2Rationale": "S18.5/S18.6 enforcement: a deterministic check that the bound skill was loaded and the declared artifact evidence exists before a phase progresses (WL-GOV-03 pattern; fidelity.py precedent). Honest stub semantics: ships as a deterministic spec stub in the spec-approval-gate-stub style — gate EMISSION is this pack's scope; live hook wiring is Engram-side and follows pack adoption (see the coverage exclusion).",
+      "relationships": {
+        "dependsOn": ["process-intake", "process-plan", "process-implement", "process-review", "process-capture", "accord-sweep"],
+        "complements": ["d065-adversarial-review-gate"],
+        "composesWith": ["agt-enforce-gate"],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "canonical-home-gate",
+      "kind": "gate",
+      "disposition": "generate",
+      "traceability": { "truthIds": ["t1"], "constraintIds": ["c1"] },
+      "l2Rationale": "S18.1 enforcement: flags process-artifact writes outside the declared canonical home (WORKLIST.md, DECISIONS.md, ORCHESTRATOR-LOG.md, PHASE-STATUS.md, plans/, retrospectives/) — flag, not block, while the pack is in shadow phase. Honest stub semantics: emitted as a deterministic spec stub; live path-watching code follows pack adoption.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-fidelity-gate"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "coding-lane-pipeline",
+      "kind": "agent",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t5", "t6"], "constraintIds": [] },
+      "l2Rationale": "The shipped implement lane and the precedent every process pack imitates: pinned skills, deterministic fidelity gates, sandboxed execution — reuse, never reimplement.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-implement"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "d065-adversarial-review-gate",
+      "kind": "hook",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t2"], "constraintIds": [] },
+      "l2Rationale": "The strongest live enforcement point in the composition: a built, blocking PreToolUse hook — the review process's teeth already exist and the pack points at them instead of duplicating them.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-review"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "capture-pipeline",
+      "kind": "skill",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t3", "t7"], "constraintIds": [] },
+      "l2Rationale": "Shipped capture skill; process-capture binds it deterministically rather than duplicating any of its procedure.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-capture"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "skill-forge",
+      "kind": "skill",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t6"], "constraintIds": [] },
+      "l2Rationale": "The only sanctioned path for minting new skills (WL-PROC-05 amendment); intake routes skill-shaped work here so no process ever generates skills blind.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-intake"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "writing-plans",
+      "kind": "skill",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t3", "t6"], "constraintIds": [] },
+      "l2Rationale": "Lived planning skill; bound deterministically by process-plan (when authoring a plan, load writing-plans).",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-plan"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "executing-plans",
+      "kind": "skill",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t3", "t6"], "constraintIds": [] },
+      "l2Rationale": "Lived execution skill; bound deterministically by process-implement (when executing a plan, load executing-plans).",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-implement"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "feature-framework",
+      "kind": "skill",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t3", "t6"], "constraintIds": [] },
+      "l2Rationale": "Inventory-before-design discipline (confirm gaps, don't assume) with the reuse record; bound by process-plan for feature-shaped work.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-plan"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "verification-before-completion",
+      "kind": "skill",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t3", "t8"], "constraintIds": [] },
+      "l2Rationale": "The no-unverified-claims skill; bound before any completion claim, at review, and inside the sweep — the behavioral half of honest measurement.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-implement", "process-review", "accord-sweep"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "definition-of-done",
+      "kind": "skill",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t3", "t8"], "constraintIds": [] },
+      "l2Rationale": "Binary done criteria; bound at plan authoring and at review judgment so done means the same thing at both ends.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-plan", "process-review"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "dmaic",
+      "kind": "skill",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t8"], "constraintIds": [] },
+      "l2Rationale": "Measure-first improvement discipline for repeating defect classes surfaced by capture and review; the dmaic methodology dependency made concrete as a bound skill.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-capture"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "theory-of-constraints",
+      "kind": "skill",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t8"], "constraintIds": ["c1"] },
+      "l2Rationale": "Constraint discipline: c1's exploit, subordinate, and elevate options and the sweep's constraint-shift check come from here; bound by accord-sweep.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["accord-sweep"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "agt-grounding-sensor",
+      "kind": "gate",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t7"], "constraintIds": ["c1"] },
+      "l2Rationale": "Built deterministic citation verification; review and sweep route file:line claims here instead of re-reading themselves — the mechanical heart of the accord sweep and the exploit move on c1.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["process-review", "accord-sweep"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "agt-enforce-gate",
+      "kind": "gate",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t2", "t5"], "constraintIds": [] },
+      "l2Rationale": "Built may-I-act decision keyed on surface_id — the primitive for per-agent enforcement intensity (S18.8) without ever forking the process definition.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": [],
+        "composesWith": ["process-fidelity-gate"],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "needs-review-queue",
+      "kind": "command",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t4"], "constraintIds": [] },
+      "l2Rationale": "The propose-dont-bypass exit (D-044): every process's only legitimate escape valve files here; kind command because it is the invokable action agents take, not a blocking gate.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": ["accord-sweep"],
+        "composesWith": [],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "langfuse",
+      "kind": "config",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t8"], "constraintIds": [] },
+      "l2Rationale": "The measurement substrate: the Langfuse x flight-recorder scoring integration (operator, 2026-07-21, in progress) is where s7 wires CTQ instrumentation; kind config because it is substrate the pack configures against, not behavior the pack adds.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": [],
+        "composesWith": ["agt-flight-recorder"],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    },
+    {
+      "name": "agt-flight-recorder",
+      "kind": "config",
+      "disposition": "reuse_existing",
+      "traceability": { "truthIds": ["t8"], "constraintIds": ["c1"] },
+      "l2Rationale": "Append-only decision record (95k+ lines) — the audit substrate the accord sweep reads and the second half of the scoring integration; kind config because the pack consumes it, never writes machinery into it.",
+      "relationships": {
+        "dependsOn": [],
+        "complements": [],
+        "composesWith": ["langfuse"],
+        "supersedes": [],
+        "bindsTools": []
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "name": "scanMinSampleSize",
+      "purpose": "Minimum outcome records required before a scan may file an improvement proposal from this pack's CTQ data — the factory refuses to propose from noise.",
+      "range": { "min": 10, "max": 100 },
+      "default": 20
+    },
+    {
+      "name": "accordSweepCadenceDays",
+      "purpose": "Days between accord sweeps — the pay-down cadence for constraint c1; tighten while drift findings grow, relax as they decline.",
+      "range": { "min": 7, "max": 90 },
+      "default": 30
+    }
+  ],
+  "methodologyDeps": ["first-principles", "theory-of-constraints", "dmaic"],
+  "registryEntry": {
+    "targets": [],
+    "versions": [],
+    "metricsLocations": []
+  }
+}
