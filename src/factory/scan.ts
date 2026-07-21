@@ -171,11 +171,18 @@ const MIN_SAMPLE_KNOB = "scanMinSampleSize";
 /**
  * Resolve the sample floor: explicit option > the spec's own
  * scanMinSampleSize knob default (its declared single-loop surface) > 20.
+ * A shape-valid but range-violating default must not LOWER the floor: when
+ * the knob declares a numeric range and its default sits below range.min,
+ * the floor clamps up to range.min (pv-knob-bounds flags the lie at
+ * validation time; this keeps direct scanPack callers safe regardless).
  */
 function resolveMinSample(spec: ProcessSpec, opts: { minSample?: number }): number {
   if (opts.minSample !== undefined) return opts.minSample;
   const knob = spec.knobs.find((k) => k.name === MIN_SAMPLE_KNOB);
-  if (knob && typeof knob.default === "number") return knob.default;
+  if (knob && typeof knob.default === "number") {
+    if (!Array.isArray(knob.range) && knob.default < knob.range.min) return knob.range.min;
+    return knob.default;
+  }
   return DEFAULT_MIN_SAMPLE;
 }
 

@@ -262,4 +262,54 @@ describe("emitProcessPack", () => {
     expect(fs.existsSync(outDir)).toBe(false);
     expect(fs.readdirSync(tmp)).toEqual([]); // temp dir cleaned up
   });
+
+  it("a cleanup failure during error recovery never masks the original error", () => {
+    const failing: EmitFs = {
+      existsSync: (p) => fs.existsSync(p),
+      ensureDirSync: (p) => {
+        fs.ensureDirSync(p);
+      },
+      writeFileSync: (p, data) => {
+        if (p.endsWith("metrics.json")) throw new Error("disk full (injected)");
+        fs.writeFileSync(p, data);
+      },
+      renameSync: (from, to) => fs.renameSync(from, to),
+      removeSync: () => {
+        throw new Error("cleanup also failed (injected)");
+      },
+    };
+    // The ORIGINAL write error surfaces — the removeSync failure is swallowed.
+    expect(() => emitProcessPack(seed(), outDir, { fs: failing })).toThrow(/disk full/);
+    expect(fs.existsSync(outDir)).toBe(false);
+  });
+
+  it("hostile strings (quotes, colons, newlines, ${}) in a truth and l2Rationale emit parseable, safely-quoted frontmatter", () => {
+    const HOSTILE = 'gotcha: "quoted"\n---\ninjected: yes ${process.env.SECRET}';
+    const spec = seed();
+    spec.foundations.truths[0].statement = HOSTILE; // t1 — cited by the factory-intake skill
+    const intake = spec.artifacts.find((a) => a.name === "factory-intake")!;
+    intake.l2Rationale = HOSTILE;
+
+    emitProcessPack(spec, outDir);
+    const skill = fs.readFileSync(path.join(outDir, "skills", "factory-intake", "SKILL.md"), "utf8");
+
+    // Frontmatter still parses: delimited, and every line stays key/list
+    // structured — an unescaped newline or a bare --- smuggled out of the
+    // hostile strings would break this loop.
+    expect(skill.startsWith("---\n")).toBe(true);
+    const frontmatter = skill.split("---\n")[1];
+    expect(frontmatter.length).toBeGreaterThan(0);
+    for (const line of frontmatter.trimEnd().split("\n")) {
+      expect(line).toMatch(/^ *([A-Za-z_]+:|- )/);
+    }
+
+    // The hostile strings appear only as escaped double-quoted scalars: the
+    // exact yq/JSON form — newlines escaped to \n, quotes to \" — verbatim.
+    const expectedDescription = `${HOSTILE} Serves truths: t1 ("${HOSTILE}").`;
+    expect(skill).toContain(`description: ${JSON.stringify(expectedDescription)}`);
+
+    // The markdown body (no parse contract) still carries the provenance.
+    expect(skill).toContain("## Purpose");
+    expect(skill).toContain("**t1**");
+  });
 });

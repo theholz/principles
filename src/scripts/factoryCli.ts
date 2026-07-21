@@ -404,6 +404,18 @@ async function cmdScan(deps: FactoryDeps, rest: string[]): Promise<number> {
     deps.error(`Failed to load process spec ${parsed.specPath}: ${e instanceof Error ? e.message : String(e)}`);
     return 1;
   }
+
+  // Mechanical validation gate (mirrors cmdEmit): a spec that fails a
+  // validator must never be scanned — an orphan artifact would ground a
+  // proposal in unjustified surface, and a lying knob default (pv-knob-bounds)
+  // would corrupt the sample floor the minimum-sample rule depends on.
+  const failed = failures(validateProcessSpec(spec));
+  if (failed.length > 0) {
+    deps.error(`Spec ${parsed.specPath} failed mechanical validation — refusing to scan:`);
+    for (const f of failed) deps.error(`  - ${f.criterionId}: ${f.evidence}`);
+    return 1;
+  }
+
   let outcomes;
   try {
     outcomes = readOutcomes(deps.readFile(parsed.outcomesPath));

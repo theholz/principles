@@ -61,7 +61,13 @@ export function emitProcessPack(spec: ProcessSpec, outDir: string, deps: EmitDep
     }
     fs.renameSync(tmpDir, outDir);
   } catch (e) {
-    fs.removeSync(tmpDir);
+    // Best-effort cleanup: a removeSync failure must never mask the original
+    // templating/write error being rethrown below.
+    try {
+      fs.removeSync(tmpDir);
+    } catch {
+      /* swallowed deliberately — the original error propagates */
+    }
     throw e;
   }
   return outDir;

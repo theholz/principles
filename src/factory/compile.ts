@@ -124,6 +124,21 @@ export async function compileProcess(llm: Llm, problem: string, opts: CompileOpt
   report.push(`Triage: ${triageVerdict.verdict} — ${triageVerdict.evidence}`);
   for (const note of assessResult.notes) report.push(`Assess note: ${note}`);
 
+  // Invariant 5: assess-stage non-convergence (a triage verdict the judge
+  // never passed, a constraint claim the skeptic broke twice) belongs in the
+  // loud escalation channel, not only in the report notes. Matched on the
+  // STABLE note prefixes assess() emits (src/factory/assess.ts) so the two
+  // channels cannot drift apart silently.
+  const ASSESS_ESCALATION_PREFIXES = [
+    "triage verdict did not converge",
+    "constraint claim did not survive skepticism",
+  ];
+  for (const note of assessResult.notes) {
+    if (ASSESS_ESCALATION_PREFIXES.some((p) => note.startsWith(p))) {
+      escalations.push(`assess ${note}`);
+    }
+  }
+
   // "Build nothing" is a valid, cheap outcome (design §4 [1], §9) — exit clean.
   if (triageVerdict.verdict === "use_existing" || triageVerdict.verdict === "compose") {
     const matched = inventory.filter((e) => e.status !== "gap");

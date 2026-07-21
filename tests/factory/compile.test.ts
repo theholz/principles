@@ -376,6 +376,52 @@ describe("compileProcess", () => {
     expect(result.spec).toBeDefined();
   });
 
+  it("routes a skeptic-failed constraint claim into escalations[] — the loud channel, not just a note", async () => {
+    const { llm } = fullPipelineLlm({
+      // Reject only the CONSTRAINT claim under attack; foundation truths
+      // (whose enriched objective also mentions the constraint) still survive.
+      truth_attack: (req) =>
+        (req.prompt.split("## Claim under attack")[1] ?? "").includes("manual review capacity limits throughput")
+          ? { verdict: "reject", strongestAttack: "the claim is circular", justification: "j" }
+          : { verdict: "survives", strongestAttack: "none", justification: "solid" },
+    });
+
+    const result = await compileProcess(llm, PROBLEM, { ...baseOpts(), webSurvey: false });
+
+    expect(result.status).toBe("spec_ready"); // surfaced, not blocking
+    expect(
+      result.escalations.some(
+        (e) => e.includes("constraint claim did not survive skepticism") && e.includes("the claim is circular")
+      )
+    ).toBe(true);
+    // Both channels carry it: the assess note stays AND the escalation is loud in the report.
+    expect(result.report.some((l) => l.startsWith("Assess note:") && l.includes("did not survive skepticism"))).toBe(true);
+    expect(result.report.some((l) => l.startsWith("ESCALATION:") && l.includes("did not survive skepticism"))).toBe(true);
+  });
+
+  it("routes a non-converged triage verdict into escalations[] as well", async () => {
+    const { llm } = fullPipelineLlm({
+      rubric_verdicts: (req) => {
+        const ids = rubricIds(req.prompt);
+        if (!ids.includes("a-cites")) return passAll(req.prompt);
+        return {
+          verdicts: ids.map((id) => ({
+            criterionId: id,
+            pass: id !== "a-cites",
+            evidence: id === "a-cites" ? "still cites nothing" : `criterion ${id} satisfied by cited candidate content`,
+          })),
+        };
+      },
+    });
+
+    const result = await compileProcess(llm, PROBLEM, { ...baseOpts(), webSurvey: false });
+
+    expect(result.status).toBe("spec_ready");
+    expect(
+      result.escalations.some((e) => e.includes("triage verdict did not converge") && e.includes("a-cites"))
+    ).toBe(true);
+  });
+
   it("surfaces assembly notes (round-robin CTQ fallback) in the report", async () => {
     const { llm } = fullPipelineLlm({
       process_contract: () => ({

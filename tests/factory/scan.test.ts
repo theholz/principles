@@ -159,13 +159,26 @@ describe("scanPack pre-checks", () => {
 
   it("takes the sample floor from the spec's scanMinSampleSize knob default", async () => {
     const spec = seed();
-    spec.knobs = [{ ...spec.knobs[0], default: 5 }];
-    // 6 clean records: below the hardcoded fallback of 20, above the knob's 5.
-    const healthy = await scanPack(forbiddenLlm, spec, records(6));
+    spec.knobs = [{ ...spec.knobs[0], default: 12 }]; // inside the seed's declared range [10, 100]
+    // 13 clean records: below the hardcoded fallback of 20, above the knob's 12.
+    const healthy = await scanPack(forbiddenLlm, spec, records(13));
     expect(healthy.verdict).toBe("healthy");
-    const insufficient = await scanPack(forbiddenLlm, spec, records(4));
+    const insufficient = await scanPack(forbiddenLlm, spec, records(11));
     expect(insufficient.verdict).toBe("insufficient_data");
-    expect(insufficient.summary).toContain("5");
+    expect(insufficient.summary).toContain("12");
+  });
+
+  it("clamps a range-violating knob default up to range.min — a lying default cannot lower the floor", async () => {
+    const spec = seed();
+    spec.knobs = [{ ...spec.knobs[0], default: 5 }]; // shape-valid but below the declared range.min of 10
+    // 9 defective records would satisfy the lying default of 5 — but not the
+    // clamped floor of 10, so the scan still refuses with zero LLM calls.
+    const insufficient = await scanPack(forbiddenLlm, spec, records(9, { defect: true }));
+    expect(insufficient.verdict).toBe("insufficient_data");
+    expect(insufficient.summary).toContain("minimum sample 10");
+    // At exactly the clamped floor the scan proceeds normally.
+    const healthy = await scanPack(forbiddenLlm, spec, records(10));
+    expect(healthy.verdict).toBe("healthy");
   });
 
   it("lets opts.minSample override the knob default", async () => {

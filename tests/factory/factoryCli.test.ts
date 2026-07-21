@@ -680,6 +680,24 @@ describe("factory scan", () => {
     expect(err.join("\n")).toContain("--min-sample");
   });
 
+  it("a spec failing a mechanical validator exits 1, prints the failing criterion, and never scans (zero llm calls)", async () => {
+    const spec = JSON.parse(seedJson) as ProcessSpec;
+    spec.artifacts[0].traceability = { truthIds: [], constraintIds: [] }; // orphan → pv-traceability
+    const { llm, callCount } = forbiddenLlm();
+    const { deps, err } = makeDeps(
+      { "bad.json": JSON.stringify(spec), "outcomes.json": dumpOf(records(20)) },
+      { llm }
+    );
+
+    const code = await run(["scan", "--spec", "bad.json", "--outcomes", "outcomes.json"], deps);
+
+    expect(code).toBe(1);
+    expect(err.join("\n")).toContain("refusing to scan");
+    expect(err.join("\n")).toContain("pv-traceability");
+    expect(err.join("\n")).toContain(spec.artifacts[0].name); // offender evidence surfaced
+    expect(callCount()).toBe(0); // validation gate fires before any model call
+  });
+
   it("a missing spec or dump file exits 1 with a readable error naming the path", async () => {
     const { llm } = forbiddenLlm();
     const { deps, err } = makeDeps({ "seed.json": seedJson }, { llm });
