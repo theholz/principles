@@ -120,6 +120,20 @@ export const ConstraintAnalysisSchema = z.object({
  * The receipt requirement is the point: an unverified reuse claim must not
  * enter as ground truth, so built/partial entries without a receipt are
  * REJECTED by the loader.
+ *
+ * Name hygiene and collision semantics (PR #3 review):
+ *   - names are TRIMMED on load; empty/whitespace-only names are rejected
+ *     (per-path error);
+ *   - duplicate names WITHIN the file (case-insensitive) are rejected at
+ *     load — a duplicate would make the baseline-vs-classified merge
+ *     ambiguous about which operator row is authoritative;
+ *   - same name + same location as a scanned candidate → the baseline row's
+ *     status and receipt are authoritative (the model's row is dropped
+ *     silently — that is the feature working as designed);
+ *   - same name, DIFFERENT location → the scanned classified row is still
+ *     dropped in favor of the operator row, and assess() emits a note naming
+ *     the dropped row's location vs the baseline's, so the disagreement
+ *     about where the capability lives stays observable.
  */
 export interface BaselineEntry {
   name: string;
@@ -149,9 +163,14 @@ const BaselineFileSchema: z.ZodType<BaselineEntry[]> = z.array(BaselineEntrySche
 /**
  * Parse and validate a baseline-inventory JSON string (format above). Throws
  * with every offending path listed — never a bare "invalid" (loadSpec.ts
- * convention). Beyond shape, enforces the receipt rule: built/partial entries
- * lacking a non-empty receipt are rejected, because an unverified reuse claim
- * must not enter the pipeline as operator-verified ground truth.
+ * convention). Beyond shape, enforces:
+ *   - name hygiene: names are trimmed; empty/whitespace-only names and
+ *     case-insensitive duplicate names across the file are rejected (see the
+ *     collision-semantics block in the format docstring — the merge cannot
+ *     decide which of two same-named operator rows is authoritative);
+ *   - the receipt rule: built/partial entries lacking a non-empty receipt are
+ *     rejected, because an unverified reuse claim must not enter the pipeline
+ *     as operator-verified ground truth.
  */
 export function loadBaselineInventory(json: string): BaselineEntry[] {
   let raw: unknown;
@@ -167,7 +186,27 @@ export function loadBaselineInventory(json: string): BaselineEntry[] {
       .join("\n");
     throw new Error(`Invalid baseline inventory — shape validation failed:\n${issues}`);
   }
-  const unreceipted = parsed.data
+  const entries = parsed.data.map((entry) => ({ ...entry, name: entry.name.trim() }));
+  const empties = entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.name === "");
+  if (empties.length > 0) {
+    const issues = empties.map(({ index }) => `  - ${index}.name: empty or whitespace-only name`).join("\n");
+    throw new Error(`Invalid baseline inventory — names must be non-empty:\n${issues}`);
+  }
+  // Case-insensitive duplicate names would make the baseline-vs-classified
+  // merge (and the model-row drop keyed on lowercased name) ambiguous about
+  // which operator row is authoritative — reject at load, listing every
+  // colliding group.
+  const byLowerName = new Map<string, string[]>();
+  for (const { name } of entries) {
+    const key = name.toLowerCase();
+    byLowerName.set(key, [...(byLowerName.get(key) ?? []), name]);
+  }
+  const collisions = [...byLowerName.values()].filter((names) => names.length > 1);
+  if (collisions.length > 0) {
+    const issues = collisions.map((names) => `  - ${names.map((n) => `"${n}"`).join(", ")}`).join("\n");
+    throw new Error(`Invalid baseline inventory — duplicate names (case-insensitive):\n${issues}`);
+  }
+  const unreceipted = entries
     .map((entry, index) => ({ entry, index }))
     .filter(
       ({ entry }) =>
@@ -184,7 +223,7 @@ export function loadBaselineInventory(json: string): BaselineEntry[] {
       .join("\n");
     throw new Error(`Invalid baseline inventory — receipts required for built/partial entries:\n${issues}`);
   }
-  return parsed.data;
+  return entries;
 }
 
 // ---------------------------------------------------------------------------
@@ -429,12 +468,15 @@ const ENGRAM_SENTINEL: InventoryEntry = {
 // ---------------------------------------------------------------------------
 
 /**
- * SKILL.md description hints are UNTRUSTED scanned-file content that gets
- * interpolated into a prompt: bound each hint (200-char cap, double quotes
+ * SKILL.md description hints and baseline receipts are UNTRUSTED content that
+ * gets interpolated into a prompt: bound each hint (whitespace runs — incl.
+ * newlines — collapsed to single spaces BEFORE the 200-char cap so multi-line
+ * receipts render single-line and cannot fake prompt structure; double quotes
  * normalized to single) and delimit it in double quotes so it stays a data
- * value the model classifies, never instructions it follows.
+ * value the model classifies, never instructions it follows. Applies to every
+ * hint source (SKILL.md descriptions AND operator-baseline receipts).
  */
-const boundHint = (hint: string): string => `"${hint.slice(0, 200).replace(/"/g, "'")}"`;
+const boundHint = (hint: string): string => `"${hint.replace(/\s+/g, " ").slice(0, 200).replace(/"/g, "'")}"`;
 
 const renderCandidate = (c: ScanCandidate): string =>
   `- ${c.name} [${c.kind}] @ ${c.location} (source: ${c.source})${c.hint ? ` — ${boundHint(c.hint)}` : ""}`;
@@ -811,14 +853,31 @@ export async function assess(llm: Llm, problem: string, opts: AssessOptions): Pr
   // it emits for a baseline name is dropped: operator-verified status is
   // authoritative and can never be flipped by classification (triage-miss #3:
   // code-invisible substrate must not re-enter as a model-invented "gap").
+  // A drop at the SAME location is the feature working silently; a drop at a
+  // DIFFERENT location means the scan and the operator disagree about where
+  // the capability lives — surfaced via notes (PR #3 review), never hidden.
   const baselineRows: InventoryEntry[] = baseline.map((b) => ({
     name: b.name,
     kind: b.kind,
     location: b.location,
     status: b.status,
   }));
-  const baselineNames = new Set(baseline.map((b) => b.name.toLowerCase()));
-  const merged = [...baselineRows, ...classified.filter((e) => !baselineNames.has(e.name.toLowerCase()))];
+  const baselineByName = new Map(baseline.map((b) => [b.name.toLowerCase(), b]));
+  const kept: InventoryEntry[] = [];
+  for (const e of classified) {
+    const b = baselineByName.get(e.name.toLowerCase());
+    if (!b) {
+      kept.push(e);
+      continue;
+    }
+    if (e.location !== b.location) {
+      notes.push(
+        `baseline collision: dropped classified row "${e.name}" @ ${e.location || "(none)"} — ` +
+          `operator baseline places it @ ${b.location || "(none)"}; baseline status/receipt are authoritative`
+      );
+    }
+  }
+  const merged = [...baselineRows, ...kept];
   const inventory: InventoryEntry[] = engramUnavailable ? [...merged, ENGRAM_SENTINEL] : merged;
 
   // Opaque per-run citation ids, assigned in code and joined back to the
