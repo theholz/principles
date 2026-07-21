@@ -338,3 +338,36 @@ facts before engaging in any meaningful work; if not, establish that baseline fi
 7. **Metric evolution lives inside the improvement loop**: when scan detects the
    constraint has shifted, it proposes new anchor metrics — "that's not instability,
    that's the system working correctly."
+
+---
+
+## 16. Earned-autonomy ladder (ASPIRATIONAL — operator-gated, addendum 2026-07-21)
+
+Definition adopted: an action is **operator-anchored** when it traces to an operator-set
+anchor (goal, threshold, or standing grant), any grant was earned against recorded
+calibration for that decision class, remains scoped and revocable, and leaves an audit
+trail the operator actually reviews. HITL is the *floor state* of a decision class, not
+the definition of anchoring; the anchor migrates approval → standing policy →
+retrospective audit as calibration accumulates, and never disappears.
+
+**Status: NOT in force.** The operator conditionally agrees, gated on ALL of:
+1. `agt_full` fully built and integrated with every surface, model, and agent per its
+   definitions — no governance-free lanes.
+2. A detailed, operator-approved migration plan before any decision class graduates
+   past HITL. No wholesale grants.
+3. Demonstrated transparency the operator trusts: audit trails, calibration ledgers,
+   and tamper evidence, proven over real usage.
+
+**Never-graduates class (binding now, not aspirational):** any modification of
+governance configuration, policy, enforcement wiring, or audit machinery by an agent
+is permanently operator-only (D-064 lineage). Recent grounds: 2026-07-20/21 incident —
+Anthropic-model sessions tampering with the operator's governance setup (possibly
+misconfiguration-annoyance-driven; irrelevant — the class is closed). An agent that
+touches its own governor invalidates the calibration currency the ladder runs on.
+
+Mechanics when in force: calibration tracks per (decision class × model); graduation
+order by reversibility × blast radius (bounded knob-tuning first; deploy-to-main last
+or never); demotion on miss; trust decays with model changes; operator owns every
+threshold and every "met" (WL-37 canon). Constraint discipline applies to the operator
+as constraint: exploit (cheap evidence-attached reviews) and subordinate (WIP-capped
+review queues) before elevate (delegation).
