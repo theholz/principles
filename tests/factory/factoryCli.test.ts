@@ -48,12 +48,17 @@ function makeFakeEmitFs() {
   return { files, dirs, emitFs };
 }
 
-/** Deps with a spec-file world (readFile/exists) separate from the emit fs. */
-const makeDeps = (specFiles: Record<string, string> = {}) => {
+/**
+ * Deps with a spec-file world (readFile/exists) separate from the emit fs.
+ * The deploy surface (deployFs + exec) shares the same file map and records
+ * every exec call — no real subprocess ever runs in these tests.
+ */
+const makeDeps = (specFiles: Record<string, string> = {}, opts: { engramPluginsRoot?: string } = {}) => {
   const out: string[] = [];
   const err: string[] = [];
   const specs = new Map(Object.entries(specFiles));
   const fake = makeFakeEmitFs();
+  const execCalls: { cmd: string; args: string[]; cwd?: string }[] = [];
   const deps: FactoryDeps = {
     readFile: (p) => {
       const content = specs.get(p);
@@ -62,10 +67,29 @@ const makeDeps = (specFiles: Record<string, string> = {}) => {
     },
     exists: (p) => specs.has(p),
     emitFs: fake.emitFs,
+    deployFs: {
+      readFile: (p) => {
+        const content = specs.get(p);
+        if (content === undefined) throw new Error(`ENOENT: ${p}`);
+        return content;
+      },
+      writeFile: (p, data) => {
+        specs.set(p, data);
+      },
+      exists: (p) => specs.has(p),
+      copyDir: () => {},
+    },
+    exec: async (cmd, args, cwd) => {
+      execCalls.push({ cmd, args, cwd });
+      return cmd === "gh"
+        ? { code: 0, stdout: "https://github.com/theholz/engram-plugins/pull/7\n", stderr: "" }
+        : { code: 0, stdout: "", stderr: "" };
+    },
+    engramPluginsRoot: opts.engramPluginsRoot,
     log: (s) => out.push(s),
     error: (s) => err.push(s),
   };
-  return { deps, out, err, fake };
+  return { deps, out, err, fake, execCalls };
 };
 
 describe("factory emit", () => {
@@ -157,6 +181,78 @@ describe("factory emit", () => {
     expect(code).toBe(2);
     expect(err.join("\n")).toContain("--bogus");
     expect(fake.files.size).toBe(0);
+  });
+});
+
+describe("factory deploy", () => {
+  const packDir = path.join("packs", "demo-pack");
+  const packFiles = (): Record<string, string> => ({
+    [path.join(packDir, ".claude-plugin", "plugin.json")]: JSON.stringify({
+      name: "demo-pack",
+      version: "0.1.0",
+    }),
+    [path.join(packDir, "process-spec.json")]: JSON.stringify({ meta: { version: "0.1.0" } }),
+    [path.join(packDir, "manifest", "metrics.json")]: JSON.stringify({ governancePhase: "shadow" }),
+  });
+
+  it("deploys with --engram-root: exit 0, prints branch + draft-PR url, runs the git/gh sequence", async () => {
+    const { deps, out, execCalls } = makeDeps(packFiles());
+
+    const code = await run(["deploy", packDir, "--engram-root", "engram-plugins"], deps);
+
+    expect(code).toBe(0);
+    expect(out.join("\n")).toContain("factory/deploy-demo-pack-");
+    expect(out.join("\n")).toContain("https://github.com/theholz/engram-plugins/pull/7");
+    const rendered = execCalls.map((c) => [c.cmd, ...c.args].join(" "));
+    expect(rendered[0]).toMatch(/^git checkout -b factory\/deploy-demo-pack-/);
+    expect(rendered).toContainEqual(expect.stringMatching(/^git push -u origin factory\/deploy-demo-pack-/));
+    expect(rendered).toContainEqual(expect.stringMatching(/^gh pr create --draft /));
+    expect(execCalls.every((c) => c.cwd === "engram-plugins")).toBe(true);
+  });
+
+  it("falls back to deps.engramPluginsRoot (env FACTORY_ENGRAM_PLUGINS_ROOT) when --engram-root is absent", async () => {
+    const { deps, execCalls } = makeDeps(packFiles(), { engramPluginsRoot: "env-root" });
+
+    const code = await run(["deploy", packDir], deps);
+
+    expect(code).toBe(0);
+    expect(execCalls.every((c) => c.cwd === "env-root")).toBe(true);
+  });
+
+  it("neither --engram-root nor the env root configured: exit 1, nothing executed", async () => {
+    const { deps, err, execCalls } = makeDeps(packFiles());
+
+    const code = await run(["deploy", packDir], deps);
+
+    expect(code).toBe(1);
+    expect(err.join("\n")).toContain("--engram-root");
+    expect(err.join("\n")).toContain("FACTORY_ENGRAM_PLUGINS_ROOT");
+    expect(execCalls).toEqual([]);
+  });
+
+  it("a pack missing manifest/metrics.json is refused: exit 1, no exec calls", async () => {
+    const files = packFiles();
+    delete files[path.join(packDir, "manifest", "metrics.json")];
+    const { deps, err, execCalls } = makeDeps(files);
+
+    const code = await run(["deploy", packDir, "--engram-root", "engram-plugins"], deps);
+
+    expect(code).toBe(1);
+    expect(err.join("\n")).toContain("Refusing to deploy");
+    expect(execCalls).toEqual([]);
+  });
+
+  it("deploy without a pack dir is a usage error (exit 2)", async () => {
+    const { deps, err } = makeDeps();
+    expect(await run(["deploy"], deps)).toBe(2);
+    expect(err.join("\n")).toContain("Usage:");
+  });
+
+  it("an unknown flag on deploy is a usage error (exit 2), nothing executed", async () => {
+    const { deps, err, execCalls } = makeDeps(packFiles());
+    expect(await run(["deploy", packDir, "--bogus"], deps)).toBe(2);
+    expect(err.join("\n")).toContain("--bogus");
+    expect(execCalls).toEqual([]);
   });
 });
 
