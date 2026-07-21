@@ -14,7 +14,7 @@ import { emitProcessPack, renderPack, EmitFs } from "../factory/emitters/process
 import { deployProcessPack, DeployFs, ExecFn } from "../factory/deploy";
 import { compileProcess, CompileResult } from "../factory/compile";
 import { readOutcomes, scanPack, ImprovementProposal } from "../factory/scan";
-import { EngramClient } from "../factory/assess";
+import { BaselineEntry, EngramClient, loadBaselineInventory } from "../factory/assess";
 
 /**
  * Process-factory CLI (design §7): `factory compile | emit | deploy | scan | models`.
@@ -74,7 +74,9 @@ export interface FactoryDeps {
 
 const USAGE = [
   "Usage: factory <verb>",
-  '  compile "<problem>" [--out <spec-path>] [--roots <dir,dir>] [--engram]  stages 1-4; stops at the spec-approval HITL gate',
+  '  compile "<problem>" [--out <spec-path>] [--roots <dir,dir>] [--engram] [--baseline <file>]',
+  "                                                                          stages 1-4; stops at the spec-approval HITL gate;",
+  "                                                                          --baseline: operator-verified inventory JSON (Baseline Accord as input)",
   "  emit <spec-path> [--out <dir>]                                          deterministic pack emission from an approved spec",
   "  deploy <pack-dir> [--engram-root <dir>]                                 branch + draft PR only",
   "  scan --spec <spec-path> --outcomes <dump-path> [--min-sample N] [--out <path>]",
@@ -91,6 +93,7 @@ interface CompileArgs {
   outPath: string;
   roots?: string[];
   engram: boolean;
+  baselinePath?: string;
 }
 
 function parseCompileArgs(rest: string[]): CompileArgs | { badUsage: string } {
@@ -98,12 +101,17 @@ function parseCompileArgs(rest: string[]): CompileArgs | { badUsage: string } {
   let outPath: string | undefined;
   let roots: string[] | undefined;
   let engram = false;
+  let baselinePath: string | undefined;
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a === "--out") {
       const raw = rest[++i];
       if (!raw || raw.startsWith("--")) return { badUsage: "--out requires a file argument" };
       outPath = raw;
+    } else if (a === "--baseline") {
+      const raw = rest[++i];
+      if (!raw || raw.startsWith("--")) return { badUsage: "--baseline requires a file argument" };
+      baselinePath = raw;
     } else if (a === "--roots") {
       const raw = rest[++i];
       if (!raw || raw.startsWith("--")) return { badUsage: "--roots requires a comma-separated directory list" };
@@ -125,7 +133,7 @@ function parseCompileArgs(rest: string[]): CompileArgs | { badUsage: string } {
   if (problem === undefined || problem.trim() === "") {
     return { badUsage: 'compile requires a "<problem>" argument' };
   }
-  return { problem, outPath: outPath ?? "process-spec.json", roots, engram };
+  return { problem, outPath: outPath ?? "process-spec.json", roots, engram, baselinePath };
 }
 
 /** Escalations surfaced loudly on stderr, on EVERY compile outcome (invariant 5). */
@@ -151,6 +159,26 @@ async function cmdCompile(deps: FactoryDeps, rest: string[]): Promise<number> {
     );
   }
 
+  // Operator baseline (Baseline Accord as INPUT): loaded and validated BEFORE
+  // any model call — a missing or invalid baseline file is an operational
+  // error, never a silent fallback to scan-only inventory (the whole point is
+  // that unverified reuse claims must not enter as ground truth).
+  let baseline: BaselineEntry[] | undefined;
+  if (parsed.baselinePath) {
+    if (!deps.exists(parsed.baselinePath)) {
+      deps.error(`No baseline inventory found at ${parsed.baselinePath} — nothing compiled.`);
+      return 1;
+    }
+    try {
+      baseline = loadBaselineInventory(deps.readFile(parsed.baselinePath));
+    } catch (e) {
+      deps.error(
+        `Failed to load baseline inventory ${parsed.baselinePath}: ${e instanceof Error ? e.message : String(e)}`
+      );
+      return 1;
+    }
+  }
+
   // Default inventory roots: the engram-plugins checkout's plugins/ dir when
   // configured, else none (assess reports unavailable roots and continues).
   const roots =
@@ -162,6 +190,7 @@ async function cmdCompile(deps: FactoryDeps, rest: string[]): Promise<number> {
       roots,
       webSurvey: deps.webSurvey ?? false,
       engram: parsed.engram ? deps.engram : undefined,
+      baseline,
       outPath: parsed.outPath,
       // Written through emitFs so tests observe the write without disk.
       writeFile: (p, c) => {
