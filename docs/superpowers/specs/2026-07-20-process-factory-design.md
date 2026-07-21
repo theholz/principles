@@ -448,3 +448,21 @@ Existing machinery these bind to: D-015 (WORKLIST as THE list), PLATFORM-SOT §1
 skill_gates + coding_lane fidelity.py (mandatory-skill enforcement), accord sweeps (§15/
 D-candidate), needs-review queue (WL-SKILL-2b), persona-interview skill (multi-hat
 judging), §16 ladder (priced agency).
+
+### §18 additions (operator, 2026-07-21, with the entries' ratification)
+
+8. **Process constant, enforcement calibrated.** Every agent and model runs the SAME
+   process — consistency is what makes process measurable. What varies per (agent ×
+   model) is enforcement intensity: some follow guidance, some must be forced or
+   reminded frequently, and subagents take liberties if allowed (operator-observed).
+   Emitted packs carry one process definition plus per-agent enforcement profiles —
+   never per-agent process forks.
+9. **Deterministic skill binding.** The semantic skill router is deprecated for process
+   flows (found inaccurate — the finding that led to the factory): a process states
+   "when you do X, load skill Y." Semantic search is never the delivery mechanism for
+   a known requirement; the router remains for genuine discovery only.
+
+Noted pattern (reference): igareosh/fpf-agentic-thinking-map — traversal legality
+computed in code outside the token stream ("removes the need for discipline"); same
+ethos as §18.5/§18.6; candidate runtime enforcement layer for emitted processes, and
+the model for the dashboard's process-map view.
