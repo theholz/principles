@@ -160,7 +160,11 @@ function compilePipelineLlm(overrides: Partial<Record<string, (req: LlmRequest<u
           ],
         };
       case "triage_verdict":
-        return { verdict: "create_new", evidence: "dmaic is only partial; journal-gate is a gap — coverage below 50%" };
+        return {
+          verdict: "create_new",
+          citedEntryIds: [],
+          evidence: "dmaic is only partial; journal-gate is a gap — coverage below 50%",
+        };
       case "constraint_analysis":
         return {
           flowSteps: ["capture", "review", "act"],
@@ -478,8 +482,20 @@ describe("factory compile", () => {
   });
 
   it("build_nothing: exit 0, verdict + evidence printed, no spec written", async () => {
+    // The CLI wires no injected id generator, so this exercises the default
+    // crypto-derived opaque ids: the fake reads the id for dmaic off the
+    // inventory table in its own prompt — exactly what a live model must do.
+    const idOf = (prompt: string, name: string): string => {
+      const m = prompt.match(new RegExp(`^- (\\S+): ${name} \\[`, "m"));
+      if (!m) throw new Error(`no inventory id for ${name} in the triage prompt`);
+      return m[1];
+    };
     const { llm, countBySchema } = compilePipelineLlm({
-      triage_verdict: () => ({ verdict: "use_existing", evidence: "dmaic covers >=80% of the need" }),
+      triage_verdict: (req) => ({
+        verdict: "use_existing",
+        citedEntryIds: [idOf(req.prompt, "dmaic")],
+        evidence: "dmaic covers >=80% of the need",
+      }),
     });
     const { deps, out, fake } = makeDeps({}, { llm });
 
