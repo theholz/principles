@@ -31,6 +31,10 @@ const packFiles = (): Record<string, string> => ({
   }),
   [path.join(PACK, "process-spec.json")]: JSON.stringify({ meta: { version: "0.1.0" } }),
   [path.join(PACK, "manifest", "metrics.json")]: JSON.stringify({ governancePhase: "shadow" }),
+  // Two emitted skills: the conflict check must run once per skills/<name>/
+  // directory (conflict_check.py expects SKILL.md directly under its argument).
+  [path.join(PACK, "skills", "alpha", "SKILL.md")]: "---\nname: alpha\n---\nAlpha.",
+  [path.join(PACK, "skills", "beta", "SKILL.md")]: "---\nname: beta\n---\nBeta.",
 });
 
 interface RecordedCall {
@@ -65,6 +69,18 @@ function makeWorld(opts: {
         if (k.startsWith(from + path.sep)) files.set(to + k.slice(from.length), v);
       }
     },
+    listDirs: (p) => {
+      // Derive immediate subdirectory names from the file map's keys.
+      const prefix = p + path.sep;
+      const names = new Set<string>();
+      for (const k of files.keys()) {
+        if (!k.startsWith(prefix)) continue;
+        const rest = k.slice(prefix.length);
+        const sep = rest.indexOf(path.sep);
+        if (sep > 0) names.add(rest.slice(0, sep));
+      }
+      return [...names].sort();
+    },
   };
 
   const exec: ExecFn = async (cmd, args, cwd) => {
@@ -96,7 +112,9 @@ describe("deployProcessPack", () => {
 
     expect(world.calls.map((c) => [c.cmd, ...c.args].join(" "))).toEqual([
       `git checkout -b ${BRANCH}`,
-      `python3 ${CONFLICT_SCRIPT} ${path.join(DEST, "skills")}`,
+      // One conflict-check invocation PER emitted skill directory.
+      `python3 ${CONFLICT_SCRIPT} ${path.join(DEST, "skills", "alpha")}`,
+      `python3 ${CONFLICT_SCRIPT} ${path.join(DEST, "skills", "beta")}`,
       `git add -- ${path.join("plugins", "demo-pack", "0.1.0")} ${REGISTRY_FILENAME}`,
       "git commit -m factory deploy: demo-pack@0.1.0",
       `git push -u origin ${BRANCH}`,
@@ -116,21 +134,31 @@ describe("deployProcessPack", () => {
     expect(world.calls.some((c) => c.args.includes("merge") || c.args.includes("main"))).toBe(false);
   });
 
-  it("conflict check present: python3 runs and its stdout summary lands in the PR body", async () => {
+  it("conflict check present: one python3 run PER skill dir, per-skill summaries aggregated in the PR body", async () => {
     const world = makeWorld({
       files: { ...packFiles(), [CONFLICT_SCRIPT]: "#!/usr/bin/env python3" },
       script: (c) =>
-        c.cmd === "python3" ? { code: 0, stdout: "0 conflicts across 12 skills\n", stderr: "" } : undefined,
+        c.cmd === "python3"
+          ? { code: 0, stdout: `${path.basename(c.args[1])}: 0 conflicts\n`, stderr: "" }
+          : undefined,
     });
 
     const report = await deploy(world);
 
     expect(report.conflictCheck).toBe("ran");
-    expect(world.calls.some((c) => c.cmd === "python3")).toBe(true);
+    // Exactly one invocation per emitted skills/<name>/ directory — each
+    // pointed at the skill dir itself (conflict_check.py's contract), never
+    // at the skills/ parent.
+    const pythonCalls = world.calls.filter((c) => c.cmd === "python3");
+    expect(pythonCalls.map((c) => c.args)).toEqual([
+      [CONFLICT_SCRIPT, path.join(DEST, "skills", "alpha")],
+      [CONFLICT_SCRIPT, path.join(DEST, "skills", "beta")],
+    ]);
     const gh = world.calls.find((c) => c.cmd === "gh")!;
     const body = gh.args[gh.args.indexOf("--body") + 1];
     expect(body).toContain("## Conflict check");
-    expect(body).toContain("0 conflicts across 12 skills");
+    expect(body).toContain("- `skills/alpha`: alpha: 0 conflicts");
+    expect(body).toContain("- `skills/beta`: beta: 0 conflicts");
     expect(body).not.toContain("SKIPPED");
   });
 
@@ -146,10 +174,36 @@ describe("deployProcessPack", () => {
     expect(body).toContain("conflict check: SKIPPED (conflict_check.py not found");
   });
 
-  it("conflict check exec failure: deploy still succeeds with a SKIPPED note carrying the reason", async () => {
+  it("a nonzero conflict-check exit (e.g. HARD conflict) surfaces on that skill's line — a result, not a skip", async () => {
     const world = makeWorld({
       files: { ...packFiles(), [CONFLICT_SCRIPT]: "#!/usr/bin/env python3" },
-      script: (c) => (c.cmd === "python3" ? { code: 3, stdout: "", stderr: "boom" } : undefined),
+      script: (c) =>
+        c.cmd === "python3"
+          ? c.args[1].endsWith("alpha")
+            ? { code: 1, stdout: "", stderr: "HARD conflict(s): ['other-skill'] — block until resolved." }
+            : { code: 0, stdout: "0 conflicts\n", stderr: "" }
+          : undefined,
+    });
+
+    const report = await deploy(world);
+
+    expect(report.conflictCheck).toBe("ran");
+    const gh = world.calls.find((c) => c.cmd === "gh")!;
+    const body = gh.args[gh.args.indexOf("--body") + 1];
+    expect(body).toContain(
+      "- `skills/alpha`: conflict_check.py exited 1: HARD conflict(s): ['other-skill'] — block until resolved."
+    );
+    expect(body).toContain("- `skills/beta`: 0 conflicts");
+    expect(body).not.toContain("SKIPPED");
+  });
+
+  it("python3 unavailable (spawn throws): deploy still succeeds with a SKIPPED note carrying the reason", async () => {
+    const world = makeWorld({
+      files: { ...packFiles(), [CONFLICT_SCRIPT]: "#!/usr/bin/env python3" },
+      script: (c) => {
+        if (c.cmd === "python3") throw new Error("spawn python3 ENOENT");
+        return undefined;
+      },
     });
 
     const report = await deploy(world);
@@ -157,7 +211,22 @@ describe("deployProcessPack", () => {
     expect(report.conflictCheck).toBe("skipped");
     const gh = world.calls.find((c) => c.cmd === "gh")!;
     const body = gh.args[gh.args.indexOf("--body") + 1];
-    expect(body).toContain("conflict check: SKIPPED (conflict_check.py exited 3: boom)");
+    expect(body).toContain("conflict check: SKIPPED (python3 failed to run (spawn python3 ENOENT))");
+  });
+
+  it("script present but the pack emits no skills: SKIPPED with reason, no python3 call", async () => {
+    const files = packFiles();
+    delete files[path.join(PACK, "skills", "alpha", "SKILL.md")];
+    delete files[path.join(PACK, "skills", "beta", "SKILL.md")];
+    const world = makeWorld({ files: { ...files, [CONFLICT_SCRIPT]: "#!/usr/bin/env python3" } });
+
+    const report = await deploy(world);
+
+    expect(report.conflictCheck).toBe("skipped");
+    expect(world.calls.some((c) => c.cmd === "python3")).toBe(false);
+    const gh = world.calls.find((c) => c.cmd === "gh")!;
+    const body = gh.args[gh.args.indexOf("--body") + 1];
+    expect(body).toContain("conflict check: SKIPPED (no emitted skill directories under");
   });
 
   it("the PR body names pack, version, and the metrics manifest's governancePhase", async () => {

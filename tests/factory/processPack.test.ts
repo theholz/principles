@@ -126,7 +126,8 @@ describe("emitProcessPack", () => {
   });
 
   it("SKILL.md frontmatter parses and carries the metrics block", () => {
-    emitProcessPack(seed(), outDir);
+    const spec = seed();
+    emitProcessPack(spec, outDir);
     const skill = fs.readFileSync(path.join(outDir, "skills", "factory-intake", "SKILL.md"), "utf8");
     // Frontmatter delimiters + fields (string checks; strings are YAML double-quoted).
     expect(skill.startsWith("---\n")).toBe(true);
@@ -141,9 +142,13 @@ describe("emitProcessPack", () => {
     expect(skill).toContain('    governance_phase: "shadow"');
     expect(skill).toContain('    baseline: "unmeasured"');
     expect(skill).toContain('      - id: "ctq1"');
-    // Description derived from l2Rationale + traced truths.
-    expect(skill).toContain("cheapest intervention");
-    expect(skill).toContain('Serves truths: t1');
+    // Description is the short purpose blurb (the l2Rationale) ONLY — no
+    // truth quotations; those live in the body's provenance section.
+    const intake = spec.artifacts.find((a) => a.name === "factory-intake")!;
+    expect(skill).toContain(`description: ${JSON.stringify(intake.l2Rationale)}`);
+    expect(skill).not.toContain("Serves truths");
+    const frontmatter = skill.split("---\n")[1];
+    expect(frontmatter).not.toContain("A process spec must be operator-approved before emission.");
   });
 
   it("SKILL.md body carries provenance, role instructions, related skills, and When You're Done", () => {
@@ -186,6 +191,67 @@ describe("emitProcessPack", () => {
     expect(gate).toContain("cheapest path past this gate");
     // The gate cites the TOC constraint as well as its truth.
     expect(gate).toContain('"Nothing enforces spec-approval-before-emit today');
+  });
+
+  it("reuse_existing stubs state live machinery + location and the pack's birth phase — never 'never block'", () => {
+    const spec = seed();
+    // A reuse gate whose live implementation blocks TODAY (the D-065-style
+    // case): the inventory records where it lives.
+    spec.assessment.inventory.push({
+      name: "d065-adversarial-review-gate",
+      kind: "hook",
+      location: "/home/tait/Projects/engram/.claude/hooks/check_adversarial_review.sh",
+      status: "built",
+    });
+    spec.artifacts.push(
+      {
+        name: "d065-adversarial-review-gate",
+        kind: "gate",
+        disposition: "reuse_existing",
+        traceability: { truthIds: ["t1"], constraintIds: [] },
+        l2Rationale: "Adversarial review already gates merges today; reuse it rather than duplicating enforcement.",
+        relationships: { dependsOn: [], complements: [], composesWith: [], supersedes: [], bindsTools: [] },
+      },
+      // A reuse artifact with NO located inventory entry gets the honest fallback.
+      {
+        name: "unlocated-reuse-hook",
+        kind: "hook",
+        disposition: "reuse_existing",
+        traceability: { truthIds: ["t2"], constraintIds: [] },
+        l2Rationale: "Reuses machinery the inventory has not located.",
+        relationships: { dependsOn: [], complements: [], composesWith: [], supersedes: [], bindsTools: [] },
+      }
+    );
+    emitProcessPack(spec, outDir);
+
+    const reuseGate = fs.readFileSync(path.join(outDir, "gates", "d065-adversarial-review-gate.md"), "utf8");
+    // (a) references LIVE machinery whose actual behavior governs, with location…
+    expect(reuseGate).toContain("**References LIVE machinery.**");
+    expect(reuseGate).toContain("/home/tait/Projects/engram/.claude/hooks/check_adversarial_review.sh");
+    expect(reuseGate).toContain("Live behavior governs");
+    expect(reuseGate).toContain("including blocking, if that is its live");
+    // …(b) and, SEPARATELY, the pack's own birth phase.
+    expect(reuseGate).toContain('Pack birth phase: "shadow"');
+    expect(reuseGate).toContain("not the live gate's enforcement");
+    // Never the shadow-stub claim that a live blocking system never blocks.
+    expect(reuseGate).not.toContain("never block");
+    expect(reuseGate).not.toContain("Not live gate code");
+    // The lazy-agent "before this gate leaves shadow" note is for gates the
+    // factory will author, not machinery already live.
+    expect(reuseGate).not.toContain("cheapest path past this gate");
+
+    // Fallback when the inventory has no located entry: honest, never invented.
+    const unlocated = fs.readFileSync(path.join(outDir, "hooks", "unlocated-reuse-hook.md"), "utf8");
+    expect(unlocated).toContain("(location not recorded in the assessment inventory)");
+    expect(unlocated).not.toContain("never block");
+
+    // A generate-disposition stub keeps the honest not-live-code banner and
+    // the phase behavior line.
+    const generateGate = fs.readFileSync(path.join(outDir, "gates", "spec-approval-gate.md"), "utf8");
+    expect(generateGate).toContain("**Not live gate code.**");
+    expect(generateGate).toContain('Phase "shadow": observe and record violations; never block.');
+    const generateHook = fs.readFileSync(path.join(outDir, "hooks", "deploy-discipline-hook.md"), "utf8");
+    expect(generateHook).toContain("**Not live hook code.**");
   });
 
   it("every emitted text file matches its snapshot", () => {
@@ -303,10 +369,11 @@ describe("emitProcessPack", () => {
       expect(line).toMatch(/^ *([A-Za-z_]+:|- )/);
     }
 
-    // The hostile strings appear only as escaped double-quoted scalars: the
+    // The hostile string appears only as an escaped double-quoted scalar: the
     // exact yq/JSON form — newlines escaped to \n, quotes to \" — verbatim.
-    const expectedDescription = `${HOSTILE} Serves truths: t1 ("${HOSTILE}").`;
-    expect(skill).toContain(`description: ${JSON.stringify(expectedDescription)}`);
+    // (The description is the l2Rationale blurb alone; the hostile truth
+    // statement stays out of the frontmatter entirely.)
+    expect(skill).toContain(`description: ${JSON.stringify(HOSTILE)}`);
 
     // The markdown body (no parse contract) still carries the provenance.
     expect(skill).toContain("## Purpose");

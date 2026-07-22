@@ -90,6 +90,9 @@ const makeDeps = (
       },
       exists: (p) => specs.has(p),
       copyDir: () => {},
+      // No conflict script exists in these worlds, so the check skips before
+      // ever listing skill dirs.
+      listDirs: () => [],
     },
     exec: async (cmd, args, cwd) => {
       execCalls.push({ cmd, args, cwd });

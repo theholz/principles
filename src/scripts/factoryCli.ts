@@ -652,6 +652,13 @@ if (require.main === module) {
       writeFile: (p, data) => fs.outputFileSync(p, data),
       exists: (p) => fs.existsSync(p),
       copyDir: (from, to) => fs.copySync(from, to),
+      listDirs: (p) =>
+        fs.existsSync(p)
+          ? fs
+              .readdirSync(p, { withFileTypes: true })
+              .filter((e) => e.isDirectory())
+              .map((e) => e.name)
+          : [],
     },
     exec: realExec,
     engramPluginsRoot: process.env.FACTORY_ENGRAM_PLUGINS_ROOT,

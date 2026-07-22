@@ -42,8 +42,7 @@ described by the matcher intent below.
 ## Matcher intent
 
 Block progress exactly while any condition guarded by the traced truths
-below is unsatisfied — and never otherwise (false-fire evaluation gates
-the live version).
+below is unsatisfied — and never otherwise (false-fire evaluation gates the live version).
 
 ## Enforcement
 
@@ -98,8 +97,7 @@ described by the matcher intent below.
 ## Matcher intent
 
 Fire exactly when a condition guarded by the traced truths below is at
-risk — and never otherwise (false-fire evaluation gates the live
-version).
+risk — and never otherwise (false-fire evaluation gates the live version).
 
 ## Enforcement
 
@@ -462,7 +460,7 @@ exports[`emitProcessPack > every emitted text file matches its snapshot > proces
 exports[`emitProcessPack > every emitted text file matches its snapshot > skills/factory-intake/SKILL.md 1`] = `
 "---
 name: "factory-intake"
-description: "Intake is an operator-facing procedure, not an enforcement point: a skill is the cheapest intervention that standardizes it without blocking anything. Serves truths: t1 (\\"A process spec must be operator-approved before emission.\\")."
+description: "Intake is an operator-facing procedure, not an enforcement point: a skill is the cheapest intervention that standardizes it without blocking anything."
 version: "0.1.0"
 depends_on: []
 complements: ["spec-approval-gate"]

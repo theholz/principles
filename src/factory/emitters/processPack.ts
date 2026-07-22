@@ -12,8 +12,9 @@ import { Artifact, ProcessSpec, Role } from "../types";
  *
  *   .claude-plugin/plugin.json        manifest (real installed-plugin format)
  *   skills/<name>/SKILL.md            kind=skill, disposition=generate
- *   hooks/<name>.md                   kind=hook  — spec stubs, not live code
- *   gates/<name>.md                   kind=gate  — spec stubs, not live code
+ *   hooks/<name>.md                   kind=hook  — spec stubs (generate: not live
+ *   gates/<name>.md                   kind=gate    code; reuse_existing: reference
+ *                                                  to live machinery that governs)
  *   manifest/metrics.json             pack-level sensory half (design §5)
  *   manifest/forge-handoff.json       disposition=forge_new → skill-forge
  *   process-spec.json                 the input spec verbatim (provenance)
@@ -190,14 +191,9 @@ function renderSkillMd(spec: ProcessSpec, artifact: Artifact): string {
     r.servesTruths.some((id) => artifact.traceability.truthIds.includes(id))
   );
 
-  const description = [
-    artifact.l2Rationale,
-    truths.length
-      ? `Serves truths: ${truths.map((t) => `${t.id} ("${t.statement}")`).join("; ")}.`
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  // Short purpose blurb only (PR #21 review): truth quotations live in the
+  // body's provenance section, never in the routing-facing description.
+  const description = artifact.l2Rationale;
 
   const frontmatter = [
     "---",
@@ -300,7 +296,13 @@ function renderRoleSection(role: Role): string[] {
   ];
 }
 
-// --- hooks/<name>.md and gates/<name>.md (spec stubs, not live code) -------
+// --- hooks/<name>.md and gates/<name>.md (spec stubs) ----------------------
+//
+// Disposition splits the stub's truth claims (PR #21 review): a generate stub
+// honestly says it is not live code; a reuse_existing stub references LIVE
+// machinery (e.g. the D-065 adversarial-review hook, which blocks today), so
+// it must state that the live implementation's actual behavior governs — the
+// pack's shadow birth phase describes the pack, never the live artifact.
 
 const ENFORCEMENT_BY_PHASE: Record<ProcessSpec["contract"]["governancePhase"], string> = {
   shadow: "observe and record violations; never block",
@@ -314,19 +316,40 @@ const DISPOSITION_NOTE: Record<Artifact["disposition"], string> = {
   forge_new: "queued for skill-forge — see manifest/forge-handoff.json",
 };
 
+/**
+ * Where the live capability a reuse_existing artifact references actually
+ * lives, per the assessment inventory. Honest fallback when the inventory has
+ * no located entry — the emitter never invents a path.
+ */
+function liveLocation(spec: ProcessSpec, artifact: Artifact): string {
+  const entry = spec.assessment.inventory.find((e) => e.name === artifact.name && e.location !== "");
+  return entry ? entry.location : "(location not recorded in the assessment inventory)";
+}
+
 function renderStubMd(spec: ProcessSpec, artifact: Artifact): string {
   const truths = tracedTruths(spec, artifact);
   const constraintIds = tracedConstraintIds(spec, artifact);
   const kindLabel = artifact.kind; // "hook" | "gate"
   const rel = artifact.relationships;
+  const reuse = artifact.disposition === "reuse_existing";
+  const location = reuse ? liveLocation(spec, artifact) : "";
 
   const lines = [
     `# ${artifact.name} — ${kindLabel} spec stub`,
     "",
-    `> **Not live ${kindLabel} code.** This file is a deterministic spec stub emitted by`,
-    "> the process-pack emitter. Live hook/gate scripts (concrete event binding,",
-    "> matcher authoring, false-fire evaluation, lazy-agent judging) are a later",
-    `> factory task; until then this document is the ${kindLabel}'s contract.`,
+    ...(reuse
+      ? [
+          `> **References LIVE machinery.** This ${kindLabel} reuses an existing capability`,
+          `> that is live today at \`${location}\` — the live implementation's actual`,
+          "> behavior governs, not this file. This stub records the pack's intent in",
+          "> reusing it.",
+        ]
+      : [
+          `> **Not live ${kindLabel} code.** This file is a deterministic spec stub emitted by`,
+          "> the process-pack emitter. Live hook/gate scripts (concrete event binding,",
+          "> matcher authoring, false-fire evaluation, lazy-agent judging) are a later",
+          `> factory task; until then this document is the ${kindLabel}'s contract.`,
+        ]),
     "",
     `- Kind: ${artifact.kind}`,
     `- Disposition: ${artifact.disposition} — ${DISPOSITION_NOTE[artifact.disposition]}`,
@@ -338,30 +361,52 @@ function renderStubMd(spec: ProcessSpec, artifact: Artifact): string {
     "",
     "## Event",
     "",
-    "Unbound in this stub. The concrete Claude Code hook event is selected when",
-    `the live ${kindLabel} script is authored; the firing point it must implement is`,
-    "described by the matcher intent below.",
+    ...(reuse
+      ? [
+          "Bound in the live implementation (see the location above); this stub",
+          "neither selects nor alters it.",
+        ]
+      : [
+          "Unbound in this stub. The concrete Claude Code hook event is selected when",
+          `the live ${kindLabel} script is authored; the firing point it must implement is`,
+          "described by the matcher intent below.",
+        ]),
     "",
     "## Matcher intent",
     "",
     ...(artifact.kind === "gate"
       ? [
           "Block progress exactly while any condition guarded by the traced truths",
-          "below is unsatisfied — and never otherwise (false-fire evaluation gates",
-          "the live version).",
+          "below is unsatisfied — and never otherwise" +
+            (reuse
+              ? ". The live implementation already embodies this; verify against it rather than re-deriving."
+              : " (false-fire evaluation gates the live version)."),
         ]
       : [
           "Fire exactly when a condition guarded by the traced truths below is at",
-          "risk — and never otherwise (false-fire evaluation gates the live",
-          "version).",
+          "risk — and never otherwise" +
+            (reuse
+              ? ". The live implementation already embodies this; verify against it rather than re-deriving."
+              : " (false-fire evaluation gates the live version)."),
         ]),
     "",
     "## Enforcement",
     "",
-    `- Phase "${spec.contract.governancePhase}": ${ENFORCEMENT_BY_PHASE[spec.contract.governancePhase]}.`,
+    // Two separate truth claims for reuse (PR #21 review): (a) the live
+    // artifact's behavior governs — it may block today; (b) the pack's own
+    // birth phase is shadow. Never claim a live blocking system "never blocks".
+    ...(reuse
+      ? [
+          `- Live behavior governs: the reused ${kindLabel} at \`${location}\` enforces`,
+          "  whatever it enforces today — including blocking, if that is its live",
+          "  behavior. This pack does not change it.",
+          `- Pack birth phase: "${spec.contract.governancePhase}" — this describes the pack's own`,
+          `  instrumentation posture at birth, not the live ${kindLabel}'s enforcement.`,
+        ]
+      : [`- Phase "${spec.contract.governancePhase}": ${ENFORCEMENT_BY_PHASE[spec.contract.governancePhase]}.`]),
     `- Decision rule: ${spec.contract.decisionRule}`,
     `- Control plan: ${spec.contract.controlPlan.monitoringCadence} — ${spec.contract.controlPlan.response}.`,
-    ...(artifact.kind === "gate"
+    ...(artifact.kind === "gate" && !reuse
       ? [
           "- Lazy-agent test: before this gate leaves shadow, a judge must answer",
           '  "what is the cheapest path past this gate?" with evidence; cosmetic-',
