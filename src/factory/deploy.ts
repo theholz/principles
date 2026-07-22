@@ -16,9 +16,14 @@ import path from "path";
  * metrics cannot be measured, so it must not ship).
  *
  * Conflict check (design §9): the portable skill-forge conflict_check.py is
- * resolved under the engram-plugins root, never hardcoded elsewhere. Missing
- * script or a failing run does NOT fail the deploy — the skip is recorded in
- * the PR body so reviewers see it.
+ * resolved under the engram-plugins root, never hardcoded elsewhere. Its
+ * contract is ONE skill directory per invocation (it looks for SKILL.md
+ * directly under the argument), so the deploy runs it once per emitted
+ * skills/<name>/ directory and aggregates per-skill lines into the PR body.
+ * A missing script or an unrunnable python3 does NOT fail the deploy — the
+ * skip (with reason) is recorded in the PR body so reviewers see it; a
+ * nonzero per-skill exit (e.g. a HARD conflict) is itself a result and lands
+ * in that skill's line, never masked as a skip.
  */
 
 // ---------------------------------------------------------------------------
@@ -36,6 +41,8 @@ export interface DeployFs {
   writeFile(p: string, data: string): void;
   exists(p: string): boolean;
   copyDir(from: string, to: string): void;
+  /** Names of the immediate subdirectories of p; empty when p is absent. */
+  listDirs(p: string): string[];
 }
 
 export interface DeployOptions {
@@ -231,8 +238,17 @@ const timestampSlug = (d: Date): string => d.toISOString().replace(/[:.]/g, "-")
 // Conflict check (soft: skip recorded for reviewers, never a deploy failure)
 // ---------------------------------------------------------------------------
 
-type ConflictOutcome = { status: "ran"; summary: string } | { status: "skipped"; reason: string };
+type ConflictOutcome =
+  | { status: "ran"; perSkill: { skill: string; summary: string }[] }
+  | { status: "skipped"; reason: string };
 
+/**
+ * conflict_check.py takes ONE skill directory (it expects SKILL.md directly
+ * under its argument), so the check runs once per skills/<name>/ directory.
+ * Skips (script absent, python3 unrunnable, no emitted skills) are soft and
+ * carry a reason; a nonzero exit is a per-skill RESULT (exit 1 = HARD
+ * conflict, exit 2 = no SKILL.md), reported on that skill's line.
+ */
 async function runConflictCheck(
   fs: DeployFs,
   run: (cmd: string, args: string[]) => Promise<ExecResult>,
@@ -243,19 +259,27 @@ async function runConflictCheck(
   if (!fs.exists(script)) {
     return { status: "skipped", reason: `conflict_check.py not found at ${script}` };
   }
-  let res: ExecResult;
-  try {
-    res = await run("python3", [script, skillsDir]);
-  } catch (e) {
-    return { status: "skipped", reason: `python3 failed to run (${e instanceof Error ? e.message : String(e)})` };
+  const skillNames = [...fs.listDirs(skillsDir)].sort();
+  if (skillNames.length === 0) {
+    return { status: "skipped", reason: `no emitted skill directories under ${skillsDir}` };
   }
-  if (res.code !== 0) {
-    return {
-      status: "skipped",
-      reason: `conflict_check.py exited ${res.code}${res.stderr.trim() ? `: ${res.stderr.trim()}` : ""}`,
-    };
+  const perSkill: { skill: string; summary: string }[] = [];
+  for (const name of skillNames) {
+    let res: ExecResult;
+    try {
+      res = await run("python3", [script, path.join(skillsDir, name)]);
+    } catch (e) {
+      return { status: "skipped", reason: `python3 failed to run (${e instanceof Error ? e.message : String(e)})` };
+    }
+    perSkill.push({
+      skill: name,
+      summary:
+        res.code === 0
+          ? res.stdout.trim() || "(no output)"
+          : `conflict_check.py exited ${res.code}${res.stderr.trim() ? `: ${res.stderr.trim()}` : ""}`,
+    });
   }
-  return { status: "ran", summary: res.stdout.trim() || "(no output)" };
+  return { status: "ran", perSkill };
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +333,11 @@ function renderPrBody(
     "",
     "## Conflict check",
     "",
-    conflict.status === "ran" ? conflict.summary : `conflict check: SKIPPED (${conflict.reason})`,
+    ...(conflict.status === "ran"
+      ? // One line per emitted skill; multi-line tool output is indented so it
+        // stays inside that skill's list item.
+        conflict.perSkill.map((s) => `- \`skills/${s.skill}\`: ${s.summary.replace(/\n/g, "\n  ")}`)
+      : [`conflict check: SKIPPED (${conflict.reason})`]),
     "",
     "---",
     "Draft PR opened by the process factory's deploy stage. Branch + draft PR is",
