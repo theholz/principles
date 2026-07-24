@@ -13,11 +13,16 @@ import type { EmitDeps, EmitFs } from "./processPack";
  * Layout:
  *   agents/<role.name>.md           one agent md per roles[] entry
  *   personas/<role.name>.toml       persona overlay + [[outputs]] handoff
+ *   roles/<role.name>.toml          harness role defaults (capability_mode)
  *   skills/<name>/SKILL.md          kind=skill, disposition=generate
  *   workflows/<meta.name>.rhai      subtask DAG → phase()/agent() script
  *   manifest/metrics.json           pack-level sensory half
  *   manifest/forge-handoff.json     disposition=forge_new → skill-forge
+ *   manifest/hooks-policy.json      SC7: live hooks are opt-in (never auto PreToolUse)
  *   process-spec.json               the input spec verbatim (provenance)
+ *
+ * SC7: this emitter NEVER writes hooks/hooks.json or PreToolUse sprawl.
+ * Live hooks require scar justification + separate install (not this path).
  *
  * Atomicity (design §9 / processPack pattern): render all files in memory
  * first, write to a temp sibling, rename into place. Existing outDir is refused.
@@ -80,6 +85,7 @@ export function renderGrokPack(spec: ProcessSpec): [string, string][] {
     const name = safeRoleName(role);
     add(`agents/${name}.md`, renderAgentMd(spec, role));
     add(`personas/${name}.toml`, renderPersonaToml(role));
+    add(`roles/${name}.toml`, renderRoleToml(role));
   }
 
   for (const artifact of spec.artifacts) {
@@ -87,8 +93,7 @@ export function renderGrokPack(spec: ProcessSpec): [string, string][] {
       add(`skills/${safeArtifactName(artifact)}/SKILL.md`, renderSkillMd(spec, artifact));
     }
     // forge_new → forge-handoff only; reuse_existing → no file.
-    // hook/gate generate stubs are later tasks — not dropped as claimed
-    // capabilities here because Grok packs surface roles + skills + workflow first.
+    // hook/gate: NEVER auto-emit live hooks/hooks.json (SC7). Stubs optional later.
   }
 
   if (spec.foundations.subtasks.length > 0) {
@@ -98,9 +103,39 @@ export function renderGrokPack(spec: ProcessSpec): [string, string][] {
 
   add("manifest/metrics.json", renderMetricsManifest(spec));
   add("manifest/forge-handoff.json", renderForgeHandoff(spec));
+  add("manifest/hooks-policy.json", renderHooksPolicy(spec));
   add("process-spec.json", jsonFile(spec));
 
+  // SC7 mechanical guard: never ship PreToolUse sprawl via this emitter.
+  for (const [rel] of files) {
+    if (rel === "hooks/hooks.json" || (rel.startsWith("hooks/") && rel.endsWith(".json"))) {
+      throw new Error(
+        `Templating failure: Grok pack must not auto-emit live hook config "${rel}" (SC7) — ` +
+          `live hooks are opt-in with scar justification, not default emit`
+      );
+    }
+  }
+
   return files;
+}
+
+/**
+ * Harness role capability heuristic (plan Task 6).
+ * review/audit/survey → read-only; implement/emit → all; else all.
+ */
+export function roleCapabilityMode(
+  roleName: string
+): "read-only" | "read-write" | "all" {
+  const n = roleName.toLowerCase();
+  if (/(^|[-_])(review|audit|survey|sweeper)([-_]|$)/.test(n) || n.includes("review") || n.includes("audit") || n.includes("survey")) {
+    // review-steward, accord-sweeper, audit-* → read-only
+    if (n.includes("implement") || n.includes("emit")) return "all";
+    return "read-only";
+  }
+  if (n.includes("implement") || n.includes("emit")) {
+    return "all";
+  }
+  return "all";
 }
 
 const jsonFile = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
@@ -216,6 +251,7 @@ function tomlBasicString(s: string): string {
 
 function renderPersonaToml(role: Role): string {
   const description = roleDescription(role);
+  const cap = roleCapabilityMode(role.name);
   const instructions = [
     role.instructions,
     "",
@@ -231,7 +267,7 @@ function renderPersonaToml(role: Role): string {
     tomlMultiline(instructions),
     '"""',
     "",
-    'default_capability_mode = "all"',
+    `default_capability_mode = ${tomlBasicString(cap)}`,
     "",
     "[[outputs]]",
     'name = "handoff_file"',
@@ -242,6 +278,18 @@ function renderPersonaToml(role: Role): string {
   ];
 
   return lines.join("\n");
+}
+
+// --- roles/<name>.toml (Grok harness role defaults) -------------------------
+
+function renderRoleToml(role: Role): string {
+  const cap = roleCapabilityMode(role.name);
+  const description = roleDescription(role);
+  return [
+    `description = ${tomlBasicString(description)}`,
+    `default_capability_mode = ${tomlBasicString(cap)}`,
+    "",
+  ].join("\n");
 }
 
 // --- skills/<name>/SKILL.md ------------------------------------------------
@@ -429,10 +477,11 @@ function renderWorkflowRhai(spec: ProcessSpec): string {
     const prompt = promptParts.join("\n");
 
     const label = role ? role.name : id;
+    const cap = role ? roleCapabilityMode(role.name) : "all";
     const optsLines = [
       `    label: ${rhaiString(label)},`,
       ...(role ? [`    agent_type: ${rhaiString(role.name)},`] : []),
-      '    capability_mode: "all",',
+      `    capability_mode: ${rhaiString(cap)},`,
     ];
 
     lines.push(`// Subtask ${id}${role ? ` — ${role.name}` : " (no dedicated role)"}`);
@@ -483,4 +532,23 @@ function renderForgeHandoff(spec: ProcessSpec): string {
       relationships: a.relationships,
     }));
   return jsonFile(handoff);
+}
+
+/** SC7: document that live PreToolUse is not default emit. */
+function renderHooksPolicy(spec: ProcessSpec): string {
+  const gates = spec.artifacts.filter((a) => a.kind === "gate" || a.kind === "hook");
+  return jsonFile({
+    policy: "opt-in-only",
+    sc: "SC7",
+    statement:
+      "Grok pack emit never writes hooks/hooks.json or PreToolUse for every process phase. Live hooks require scar justification and a separate install path.",
+    autoEmitLiveHooks: false,
+    gateAndHookArtifactsInSpec: gates.map((a) => ({
+      name: a.name,
+      kind: a.kind,
+      disposition: a.disposition,
+      note: "Present in process-spec only; not auto-wired as live TUI hooks",
+    })),
+    process: `${spec.meta.name}@${spec.meta.version}`,
+  });
 }

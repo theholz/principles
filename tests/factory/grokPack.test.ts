@@ -7,14 +7,18 @@ import {
   renderGrokPack,
   emitGrokPack,
   subtaskLevels,
+  roleCapabilityMode,
 } from "../../src/factory/emitters/grokPack";
 import { ProcessSpec } from "../../src/factory/types";
 
 const seedPath = path.join(__dirname, "..", "..", "seeds", "factory-meta", "process-spec.json");
 const seedJson = fs.readFileSync(seedPath, "utf8");
+const bizPath = path.join(__dirname, "..", "..", "seeds", "business-process", "process-spec.json");
+const bizJson = fs.readFileSync(bizPath, "utf8");
 
 /** Fresh, fully-validated copy of the real seed spec per test. */
 const seed = (): ProcessSpec => loadProcessSpec(seedJson);
+const biz = (): ProcessSpec => loadProcessSpec(bizJson);
 
 describe("subtaskLevels", () => {
   it("levelizes a diamond DAG: s1[]; s2[s1]; s3[s1] → [[s1],[s2,s3]]", () => {
@@ -106,6 +110,58 @@ describe("renderGrokPack", () => {
     expect(rhai).not.toMatch(/fork_context/);
     // Guard pattern for agent results.
     expect(rhai).toMatch(/!=\s*\(\)/);
+  });
+
+  it("emits roles/<name>.toml with capability heuristic", () => {
+    const files = Object.fromEntries(renderGrokPack(seed()));
+    const roleToml = files["roles/intake-operator.toml"];
+    expect(roleToml).toBeDefined();
+    expect(roleToml).toMatch(/default_capability_mode\s*=\s*"all"/);
+  });
+
+  it("SC7: never emits hooks/hooks.json; ships hooks-policy instead", () => {
+    const files = Object.fromEntries(renderGrokPack(seed()));
+    expect(files["hooks/hooks.json"]).toBeUndefined();
+    expect(Object.keys(files).some((k) => k.startsWith("hooks/"))).toBe(false);
+    const policy = JSON.parse(files["manifest/hooks-policy.json"]);
+    expect(policy.autoEmitLiveHooks).toBe(false);
+    expect(policy.policy).toBe("opt-in-only");
+  });
+});
+
+describe("roleCapabilityMode", () => {
+  it("maps review/audit names to read-only", () => {
+    expect(roleCapabilityMode("review-steward")).toBe("read-only");
+    expect(roleCapabilityMode("audit-pack")).toBe("read-only");
+    expect(roleCapabilityMode("accord-sweeper")).toBe("read-only");
+  });
+
+  it("maps implement/emit and defaults to all", () => {
+    expect(roleCapabilityMode("implement-steward")).toBe("all");
+    expect(roleCapabilityMode("intake-operator")).toBe("all");
+  });
+});
+
+describe("business-process seed (Task 7)", () => {
+  it("emits all six steward agents and review is read-only", () => {
+    const files = Object.fromEntries(renderGrokPack(biz()));
+    for (const name of [
+      "intake-steward",
+      "plan-steward",
+      "implement-steward",
+      "review-steward",
+      "capture-steward",
+      "accord-sweeper",
+    ]) {
+      expect(files[`agents/${name}.md`]).toBeDefined();
+      expect(files[`roles/${name}.toml`]).toBeDefined();
+    }
+    expect(files["roles/review-steward.toml"]).toMatch(/default_capability_mode\s*=\s*"read-only"/);
+    expect(files["roles/implement-steward.toml"]).toMatch(/default_capability_mode\s*=\s*"all"/);
+    const rhai = files["workflows/engram-business-processes.rhai"];
+    expect(rhai).toBeDefined();
+    expect(rhai).toMatch(/agent_type:\s*"review-steward"/);
+    expect(rhai).toMatch(/capability_mode:\s*"read-only"/);
   });
 });
 
