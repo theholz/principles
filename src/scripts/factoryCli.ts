@@ -11,14 +11,15 @@ import { failures } from "../shared/types";
 import { loadProcessSpec } from "../factory/loadSpec";
 import { validateProcessSpec } from "../factory/validators";
 import { emitProcessPack, renderPack, EmitFs } from "../factory/emitters/processPack";
+import { emitGrokPack, renderGrokPack } from "../factory/emitters/grokPack";
 import { deployProcessPack, DeployFs, ExecFn } from "../factory/deploy";
 import { compileProcess, CompileResult } from "../factory/compile";
 import { readOutcomes, scanPack, ImprovementProposal } from "../factory/scan";
 import { BaselineEntry, EngramClient, loadBaselineInventory } from "../factory/assess";
 
 /**
- * Process-factory CLI (design §7): `factory compile | emit | deploy | scan | models`.
- * All five verbs are live. `models` is a read-only introspection verb: one GET
+ * Process-factory CLI (design §7): `factory compile | emit | emit-grok | deploy | scan | models`.
+ * All six verbs are live. `models` is a read-only introspection verb: one GET
  * against the configured provider's `/models` endpoint (no LLM call) via the
  * injected `deps.fetchJson`. `emit` and `deploy` are deliberately deterministic
  * and offline — no model call on either path, and the LLM gateway is resolved
@@ -78,6 +79,7 @@ const USAGE = [
   "                                                                          stages 1-4; stops at the spec-approval HITL gate;",
   "                                                                          --baseline: operator-verified inventory JSON (Baseline Accord as input)",
   "  emit <spec-path> [--out <dir>]                                          deterministic pack emission from an approved spec",
+  "  emit-grok <spec-path> [--out <dir>]                                     deterministic Grok TUI pack emission (agents/personas/skills)",
   "  deploy <pack-dir> [--engram-root <dir>]                                 branch + draft PR only",
   "  scan --spec <spec-path> --outcomes <dump-path> [--min-sample N] [--out <path>]",
   "                                                                          measure-and-propose; proposals are never auto-applied",
@@ -230,7 +232,10 @@ async function cmdCompile(deps: FactoryDeps, rest: string[]): Promise<number> {
 // emit
 // ---------------------------------------------------------------------------
 
-function parseEmitArgs(rest: string[]): { specPath: string; outDir?: string } | { badUsage: string } {
+function parseEmitArgs(
+  rest: string[],
+  verb: "emit" | "emit-grok" = "emit"
+): { specPath: string; outDir?: string } | { badUsage: string } {
   let specPath: string | undefined;
   let outDir: string | undefined;
   for (let i = 0; i < rest.length; i++) {
@@ -247,7 +252,7 @@ function parseEmitArgs(rest: string[]): { specPath: string; outDir?: string } | 
       return { badUsage: `Unexpected extra argument: ${a}` };
     }
   }
-  if (specPath === undefined) return { badUsage: "emit requires a <spec-path> argument" };
+  if (specPath === undefined) return { badUsage: `${verb} requires a <spec-path> argument` };
   return { specPath, outDir };
 }
 
@@ -289,6 +294,52 @@ function cmdEmit(deps: FactoryDeps, rest: string[]): number {
     return 0;
   } catch (e) {
     deps.error(`Emit failed: ${e instanceof Error ? e.message : String(e)}`);
+    return 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// emit-grok
+// ---------------------------------------------------------------------------
+
+function cmdEmitGrok(deps: FactoryDeps, rest: string[]): number {
+  const parsed = parseEmitArgs(rest, "emit-grok");
+  if ("badUsage" in parsed) {
+    deps.error(`${parsed.badUsage}. ${USAGE}`);
+    return 2;
+  }
+  const { specPath } = parsed;
+
+  if (!deps.exists(specPath)) {
+    deps.error(`No process spec found at ${specPath} — nothing emitted.`);
+    return 1;
+  }
+
+  let spec;
+  try {
+    spec = loadProcessSpec(deps.readFile(specPath));
+  } catch (e) {
+    deps.error(`Failed to load process spec ${specPath}: ${e instanceof Error ? e.message : String(e)}`);
+    return 1;
+  }
+
+  // Same mechanical validation gate as emit: refuse to ship invalid provenance.
+  const failed = failures(validateProcessSpec(spec));
+  if (failed.length > 0) {
+    deps.error(`Spec ${specPath} failed mechanical validation — refusing to emit-grok:`);
+    for (const f of failed) deps.error(`  - ${f.criterionId}: ${f.evidence}`);
+    return 1;
+  }
+
+  const outDir =
+    parsed.outDir ?? path.join("packages", `grok-pack-${spec.meta.name}-v${spec.meta.version}`);
+  try {
+    const emitted = emitGrokPack(spec, outDir, { fs: deps.emitFs });
+    const fileCount = renderGrokPack(spec).length;
+    deps.log(`Emitted Grok pack: ${emitted} (${fileCount} file(s))`);
+    return 0;
+  } catch (e) {
+    deps.error(`Emit-grok failed: ${e instanceof Error ? e.message : String(e)}`);
     return 1;
   }
 }
@@ -613,6 +664,8 @@ export async function run(argv: string[], deps: FactoryDeps): Promise<number> {
       return cmdCompile(deps, rest);
     case "emit":
       return cmdEmit(deps, rest);
+    case "emit-grok":
+      return cmdEmitGrok(deps, rest);
     case "deploy":
       return cmdDeploy(deps, rest);
     case "scan":
@@ -635,7 +688,7 @@ if (require.main === module) {
       });
     });
   // The gateway resolves lazily on the FIRST model call so the deterministic
-  // verbs (emit, deploy) stay usable offline with no key and no provider
+  // verbs (emit, emit-grok, deploy) stay usable offline with no key and no provider
   // warnings — compile and scan pay the resolution cost when they actually
   // need a model.
   let resolvedLlm: Llm | undefined;

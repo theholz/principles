@@ -373,6 +373,92 @@ describe("factory emit", () => {
   });
 });
 
+describe("factory emit-grok", () => {
+  it("emits a Grok pack to --out with agents/personas and logs path + file count", async () => {
+    const { deps, out, fake } = makeDeps({ "seed.json": seedJson });
+    const outDir = path.join("out", "grok-pack");
+
+    const code = await run(["emit-grok", "seed.json", "--out", outDir], deps);
+
+    expect(code).toBe(0);
+    expect(fake.files.has(path.join(outDir, "agents", "intake-operator.md"))).toBe(true);
+    expect(fake.files.has(path.join(outDir, "personas", "intake-operator.toml"))).toBe(true);
+    expect(fake.files.has(path.join(outDir, "process-spec.json"))).toBe(true);
+    expect(fake.files.has(path.join(outDir, "manifest", "metrics.json"))).toBe(true);
+    expect(fake.files.has(path.join(outDir, "skills", "factory-intake", "SKILL.md"))).toBe(true);
+    expect(JSON.parse(fake.files.get(path.join(outDir, "process-spec.json"))!).meta.name).toBe(
+      "process-factory-meta"
+    );
+    expect(out.join("\n")).toContain(outDir);
+    expect(out.join("\n")).toContain("6 file(s)");
+  });
+
+  it("defaults the output directory to packages/grok-pack-<name>-v<version>", async () => {
+    const { deps, fake } = makeDeps({ "seed.json": seedJson });
+
+    const code = await run(["emit-grok", "seed.json"], deps);
+
+    expect(code).toBe(0);
+    const defaultRoot = path.join("packages", "grok-pack-process-factory-meta-v0.1.0");
+    expect(fake.files.has(path.join(defaultRoot, "process-spec.json"))).toBe(true);
+    expect(fake.files.has(path.join(defaultRoot, "agents", "intake-operator.md"))).toBe(true);
+  });
+
+  it("a spec failing a mechanical validator exits 1, prints the failing criterion, and emits nothing", async () => {
+    const spec = JSON.parse(seedJson) as ProcessSpec;
+    spec.artifacts[0].traceability = { truthIds: [], constraintIds: [] }; // orphan → pv-traceability
+    const { deps, err, fake } = makeDeps({ "bad.json": JSON.stringify(spec) });
+
+    const code = await run(["emit-grok", "bad.json"], deps);
+
+    expect(code).toBe(1);
+    expect(err.join("\n")).toContain("pv-traceability");
+    expect(err.join("\n")).toContain(spec.artifacts[0].name);
+    expect(fake.files.size).toBe(0);
+  });
+
+  it("a missing spec file exits 1 with a readable error naming the path", async () => {
+    const { deps, err, fake } = makeDeps();
+
+    const code = await run(["emit-grok", "nope/spec.json"], deps);
+
+    expect(code).toBe(1);
+    expect(err.join("\n")).toContain("nope/spec.json");
+    expect(fake.files.size).toBe(0);
+  });
+
+  it("a spec that fails shape validation exits 1 with the loader's error", async () => {
+    const { deps, err, fake } = makeDeps({ "mangled.json": '{"meta": {}}' });
+
+    const code = await run(["emit-grok", "mangled.json"], deps);
+
+    expect(code).toBe(1);
+    expect(err.join("\n")).toContain("mangled.json");
+    expect(err.join("\n")).toContain("Invalid process spec");
+    expect(fake.files.size).toBe(0);
+  });
+
+  it("emit-grok without a spec path is a usage error (exit 2)", async () => {
+    const { deps, err } = makeDeps();
+
+    const code = await run(["emit-grok"], deps);
+
+    expect(code).toBe(2);
+    expect(err.join("\n")).toContain("emit-grok requires a <spec-path>");
+    expect(err.join("\n")).toContain("Usage:");
+  });
+
+  it("an unknown flag on emit-grok is a usage error (exit 2), nothing emitted", async () => {
+    const { deps, err, fake } = makeDeps({ "seed.json": seedJson });
+
+    const code = await run(["emit-grok", "seed.json", "--bogus"], deps);
+
+    expect(code).toBe(2);
+    expect(err.join("\n")).toContain("--bogus");
+    expect(fake.files.size).toBe(0);
+  });
+});
+
 describe("factory deploy", () => {
   const packDir = path.join("packs", "demo-pack");
   const packFiles = (): Record<string, string> => ({
@@ -995,6 +1081,12 @@ describe("factory models", () => {
 });
 
 describe("factory verbs", () => {
+  it("usage help lists emit-grok", async () => {
+    const { deps, err } = makeDeps();
+    expect(await run([], deps)).toBe(2);
+    expect(err.join("\n")).toContain("emit-grok");
+  });
+
   it("an unknown subcommand exits 2 with usage", async () => {
     const { deps, err } = makeDeps();
     expect(await run(["frobnicate"], deps)).toBe(2);
