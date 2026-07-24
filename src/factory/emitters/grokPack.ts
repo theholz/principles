@@ -6,7 +6,7 @@ import type { EmitDeps, EmitFs } from "./processPack";
 
 /**
  * Grok pack emitter: pure deterministic templating from a ProcessSpec to a
- * Grok TUI harness pack (agents, personas, skills, metrics, provenance).
+ * Grok TUI harness pack (agents, personas, skills, workflows, metrics, provenance).
  * Sibling of processPack.ts (Claude Code plugin layout) — invariant 3: the
  * Claude path is untouched. NO LLM, NO network.
  *
@@ -14,14 +14,13 @@ import type { EmitDeps, EmitFs } from "./processPack";
  *   agents/<role.name>.md           one agent md per roles[] entry
  *   personas/<role.name>.toml       persona overlay + [[outputs]] handoff
  *   skills/<name>/SKILL.md          kind=skill, disposition=generate
+ *   workflows/<meta.name>.rhai      subtask DAG → phase()/agent() script
  *   manifest/metrics.json           pack-level sensory half
  *   manifest/forge-handoff.json     disposition=forge_new → skill-forge
  *   process-spec.json               the input spec verbatim (provenance)
  *
  * Atomicity (design §9 / processPack pattern): render all files in memory
  * first, write to a temp sibling, rename into place. Existing outDir is refused.
- *
- * Workflow emit (subtasks → .rhai) is Task 3 — not this module.
  */
 
 export type { EmitDeps, EmitFs };
@@ -88,8 +87,13 @@ export function renderGrokPack(spec: ProcessSpec): [string, string][] {
       add(`skills/${safeArtifactName(artifact)}/SKILL.md`, renderSkillMd(spec, artifact));
     }
     // forge_new → forge-handoff only; reuse_existing → no file.
-    // hook/gate generate stubs and workflow emit are later tasks — not dropped
-    // as claimed capabilities here because Grok packs surface roles + skills first.
+    // hook/gate generate stubs are later tasks — not dropped as claimed
+    // capabilities here because Grok packs surface roles + skills + workflow first.
+  }
+
+  if (spec.foundations.subtasks.length > 0) {
+    const wfName = safeWorkflowName(spec.meta.name);
+    add(`workflows/${wfName}.rhai`, renderWorkflowRhai(spec));
   }
 
   add("manifest/metrics.json", renderMetricsManifest(spec));
@@ -121,6 +125,17 @@ function safeArtifactName(artifact: Artifact): string {
     );
   }
   return artifact.name;
+}
+
+/** Workflow filename / meta.name: lowercase letters, digits, hyphens (create-workflow). */
+function safeWorkflowName(name: string): string {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+    throw new Error(
+      `Templating failure: meta.name ${JSON.stringify(name)} is not a valid workflow name ` +
+        `(expected lowercase letters, digits, hyphens)`
+    );
+  }
+  return name;
 }
 
 /** First sentence of instructions, or outputHint, for agent description. */
@@ -284,6 +299,161 @@ function renderSkillMd(spec: ProcessSpec, artifact: Artifact): string {
     "Document what you did and how it went — outcome records feed the factory's scan stage.",
     "",
   ];
+
+  return lines.join("\n");
+}
+
+// --- workflows/<meta.name>.rhai --------------------------------------------
+// create-workflow constraints: pure-literal `let meta` first; self-contained
+// agent prompts (no fork_context); guard results with `r != () && r.success`.
+
+/**
+ * Kahn-style levelize: group subtask ids by dependency depth.
+ * Same-level ids have all deps already satisfied (may run parallel later).
+ * Order within a level preserves input order. Throws on cycles / unknown deps
+ * that leave a non-empty remainder with no ready nodes.
+ */
+export function subtaskLevels(
+  subtasks: { id: string; dependsOn: string[] }[]
+): string[][] {
+  const known = new Set(subtasks.map((s) => s.id));
+  // Only edges to ids present in this set count (external deps ignored).
+  const remaining = new Map<string, Set<string>>();
+  for (const s of subtasks) {
+    remaining.set(
+      s.id,
+      new Set(s.dependsOn.filter((d) => known.has(d)))
+    );
+  }
+
+  const levels: string[][] = [];
+  const done = new Set<string>();
+
+  while (done.size < subtasks.length) {
+    // Preserve input order within the level.
+    const level = subtasks
+      .filter((s) => !done.has(s.id) && (remaining.get(s.id)?.size ?? 0) === 0)
+      .map((s) => s.id);
+
+    if (level.length === 0) {
+      const stuck = subtasks
+        .filter((s) => !done.has(s.id))
+        .map((s) => s.id)
+        .join(", ");
+      throw new Error(
+        `Templating failure: cyclic or unsatisfiable subtask dependsOn (stuck: ${stuck})`
+      );
+    }
+
+    levels.push(level);
+    for (const id of level) {
+      done.add(id);
+      for (const deps of remaining.values()) {
+        deps.delete(id);
+      }
+    }
+  }
+
+  return levels;
+}
+
+/** Escape a string for a Rhai double-quoted string literal. */
+function rhaiString(s: string): string {
+  return (
+    '"' +
+    s
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\r/g, "\\r")
+      .replace(/\n/g, "\\n")
+      .replace(/\t/g, "\\t") +
+    '"'
+  );
+}
+
+/** Safe Rhai identifier fragment from a subtask id (s1, s2, …). */
+function rhaiIdent(id: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(id)) {
+    throw new Error(
+      `Templating failure: subtask id ${JSON.stringify(id)} is not a valid Rhai identifier fragment`
+    );
+  }
+  return id;
+}
+
+function renderWorkflowRhai(spec: ProcessSpec): string {
+  const wfName = safeWorkflowName(spec.meta.name);
+  const subtasks = spec.foundations.subtasks;
+  const levels = subtaskLevels(subtasks);
+  const byId = new Map(subtasks.map((s) => [s.id, s]));
+  const roleBySubtask = new Map(spec.roles.map((r) => [r.subtaskId, r]));
+
+  // Flatten levels for meta.phases (one phase title per subtask, sequential
+  // agent() within a level for v1; parallel same-level is a later phase).
+  const flatOrder = levels.flat();
+
+  const phaseEntries = flatOrder.map((id) => {
+    const st = byId.get(id)!;
+    const detail = st.description.split(/(?<=\.)\s+/)[0]?.trim() || st.description;
+    return `        #{ title: ${rhaiString(id)}, detail: ${rhaiString(detail)} },`;
+  });
+
+  const lines: string[] = [
+    "let meta = #{",
+    `    name: ${rhaiString(wfName)},`,
+    `    description: ${rhaiString(spec.meta.problemStatement)},`,
+    "    phases: [",
+    ...phaseEntries,
+    "    ],",
+    "};",
+    "",
+  ];
+
+  for (const id of flatOrder) {
+    const st = byId.get(id)!;
+    const role = roleBySubtask.get(id);
+    const varName = `r_${rhaiIdent(id)}`;
+
+    // Self-contained prompt: cold subagent must not rely on parent context.
+    const promptParts: string[] = [];
+    if (role) {
+      promptParts.push(role.instructions.trim());
+      promptParts.push("");
+      promptParts.push(`Output: ${role.outputHint.trim()}`);
+      promptParts.push("");
+    }
+    promptParts.push(`Subtask ${id}: ${st.description.trim()}`);
+    promptParts.push(
+      "Do the work with tools as needed; report a concrete outcome, not a plan."
+    );
+    const prompt = promptParts.join("\n");
+
+    const label = role ? role.name : id;
+    const optsLines = [
+      `    label: ${rhaiString(label)},`,
+      ...(role ? [`    agent_type: ${rhaiString(role.name)},`] : []),
+      '    capability_mode: "all",',
+    ];
+
+    lines.push(`// Subtask ${id}${role ? ` — ${role.name}` : " (no dedicated role)"}`);
+    lines.push(`phase(${rhaiString(id)});`);
+    lines.push(`let ${varName} = agent(${rhaiString(prompt)}, #{`);
+    lines.push(...optsLines);
+    lines.push("});");
+    lines.push(
+      `if ${varName} != () && ${varName}.success {`,
+      `    log(${rhaiString(`subtask ${id} completed`)});`,
+      `} else {`,
+      `    log(${rhaiString(`subtask ${id} failed or returned unit`)});`,
+      `}`,
+      ""
+    );
+  }
+
+  lines.push(
+    `complete(#{ summary: ${rhaiString(`${wfName} workflow finished`)} });`,
+    ""
+  );
 
   return lines.join("\n");
 }
